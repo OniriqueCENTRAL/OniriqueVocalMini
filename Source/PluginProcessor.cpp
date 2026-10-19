@@ -128,7 +128,9 @@ void OniriqueVocalMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     float* ch[2] { buffer.getWritePointer (0), numCh > 1 ? buffer.getWritePointer (1) : nullptr };
     chain.process (ch, numCh, total);
     outputTap.push (ch[0], ch[1], total);
-    license.process (buffer, getSampleRate(), isNonRealtime());
+   #if ! ONIRIQUE_NO_LICENSE
+    license.process (buffer, getSampleRate(), isNonRealtime());   // copie personnelle de l'équipe : pas de licence
+   #endif
 }
 
 juce::AudioProcessorEditor* OniriqueVocalMiniAudioProcessor::createEditor()
