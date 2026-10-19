@@ -261,12 +261,19 @@ void OniriqueVocalMiniAudioProcessorEditor::paintBackdrop (juce::Graphics& g)
         g.setColour (ui::line);
         g.drawRoundedRectangle (row.reduced (0.5f), rad, 1.0f * u);
 
-        // titre à gauche, une lueur de braise derrière
-        const auto titleR = juce::Rectangle<float> (row.getX() + 18.0f * u, row.getY(), 96.0f * u, row.getHeight());
-        juce::ColourGradient glow (ui::ember.withAlpha (0.16f), titleR.getX() + 20.0f * u, titleR.getCentreY(),
-                                   ui::ember.withAlpha (0.0f), titleR.getX() + 90.0f * u, titleR.getCentreY(), true);
-        g.setGradientFill (glow);
-        g.fillEllipse (titleR.withSizeKeepingCentre (titleR.getWidth() * 1.1f, titleR.getHeight() * 0.9f));
+        // titre à gauche, un trait de braise vertical devant lui (fondu en haut et en bas)
+        const auto titleR = juce::Rectangle<float> (row.getX() + 22.0f * u, row.getY(), 92.0f * u, row.getHeight());
+        {
+            const auto bar = juce::Rectangle<float> (row.getX() + 11.0f * u, row.getY() + 24.0f * u, 2.5f * u, row.getHeight() - 48.0f * u);
+            for (int pass = 0; pass < 2; ++pass)
+            {
+                juce::ColourGradient grad (ui::ember.withAlpha (0.0f), bar.getX(), bar.getY(), ui::ember.withAlpha (0.0f), bar.getX(), bar.getBottom(), false);
+                grad.addColour (0.5, ui::ember.withAlpha (pass == 0 ? 0.18f : 0.9f));
+                g.setGradientFill (grad);
+                if (pass == 0) g.fillRoundedRectangle (bar.expanded (3.0f * u, 0.0f), 3.0f * u);   // lueur
+                else           g.fillRoundedRectangle (bar, bar.getWidth() * 0.5f);
+            }
+        }
         g.setColour (ui::mist);
         g.setFont (ui::fitFont (ui::Face::display, 22.0f * u, titleR.getWidth() - 10.0f * u, kRowNames[r], true, 0.06f));
         g.drawText (kRowNames[r], titleR.withTrimmedBottom (row.getHeight() * 0.18f), juce::Justification::centredLeft, false);

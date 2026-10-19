@@ -12,7 +12,7 @@
     {
         return {
             preset ("Lead Clean Vocal", {}),
-            preset ("Neutral", { { "eqHi", 0 }, { "eqAir", 0 }, { "comp", 0 }, { "multiband", 0 }, { "deess", 0 }, { "drive", 0 },
+            preset ("Neutral", { { "eqMid", 0 }, { "eqHi", 0 }, { "eqAir", 0 }, { "comp", 0 }, { "multiband", 0 }, { "deess", 0 }, { "drive", 0 },
                                  { "revSmall", 0 } }),
             preset ("Rap Lead", { { "eqLow", 1.5f }, { "eqMid", 2 }, { "eqHi", 2.5f }, { "eqAir", 3 }, { "comp", 60 }, { "multiband", 35 },
                                   { "deess", 40 }, { "drive", 20 }, { "revShort", 20 }, { "revSmall", 0 } }),

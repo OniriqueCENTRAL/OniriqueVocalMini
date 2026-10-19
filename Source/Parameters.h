@@ -52,17 +52,17 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     p.push_back (std::make_unique<AudioParameterBool> (ParameterID { ids::autoInput, 1 }, "Auto Input", true));
     p.push_back (std::make_unique<AudioParameterBool> (ParameterID { ids::lowCut, 1 }, "Low Cut", true));
 
-    // EQ : réglage par défaut = une voix déjà un peu ouverte (HI +1.5, AIR +3)
+    // EQ : réglage par défaut = une voix qui ressort déjà (MID +1, HI +2, AIR +3.5)
     add (ids::low, "Low", { -10.0f, 10.0f, 0.1f }, 0.0f, Attr().withStringFromValueFunction (bip));
-    add (ids::mid, "Mid", { -10.0f, 10.0f, 0.1f }, 0.0f, Attr().withStringFromValueFunction (bip));
-    add (ids::hi,  "Hi",  { -10.0f, 10.0f, 0.1f }, 1.5f, Attr().withStringFromValueFunction (bip));
-    add (ids::air, "Air", { -10.0f, 10.0f, 0.1f }, 3.0f, Attr().withStringFromValueFunction (bip));
+    add (ids::mid, "Mid", { -10.0f, 10.0f, 0.1f }, 1.0f, Attr().withStringFromValueFunction (bip));
+    add (ids::hi,  "Hi",  { -10.0f, 10.0f, 0.1f }, 2.0f, Attr().withStringFromValueFunction (bip));
+    add (ids::air, "Air", { -10.0f, 10.0f, 0.1f }, 3.5f, Attr().withStringFromValueFunction (bip));
 
     const NormalisableRange<float> percent { 0.0f, 100.0f, 1.0f };
-    add (ids::comp,    "Comp",      percent, 35.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
-    add (ids::multi,   "Multiband", percent, 20.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
-    add (ids::deess,   "De-ess",    percent, 30.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
-    add (ids::drive,   "Drive",     percent, 10.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
+    add (ids::comp,    "Comp",      percent, 45.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
+    add (ids::multi,   "Multiband", percent, 25.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
+    add (ids::deess,   "De-ess",    percent, 35.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
+    add (ids::drive,   "Drive",     percent, 12.0f, Attr().withLabel ("%").withStringFromValueFunction (pct));
     add (ids::phone,   "Phone",     percent, 0.0f,  Attr().withLabel ("%").withStringFromValueFunction (pct));
     add (ids::doubler, "Doubler",   percent, 0.0f,  Attr().withLabel ("%").withStringFromValueFunction (pct));
     add (ids::chorus,  "Chorus",    percent, 0.0f,  Attr().withLabel ("%").withStringFromValueFunction (pct));

@@ -15,27 +15,32 @@
 
 namespace onirique::mini
 {
-/*  AUTO INPUT : le gain d'entrée se règle tout seul.
-    Le niveau de la voix (moyenne en dB des passages chantés, mesurés par fenêtres de 50 ms, graves sous 80 Hz ignorés)
-    est ramené dans la zone BEST (-18 dBFS RMS), où la compression, le de-esser et le drive ont été réglés. La correction est
-    lente (comme un ingé qui ajuste un fader, pas un compresseur), bornée à +/-18 dB et gelée dans les silences :
-    le souffle entre les phrases ne remonte jamais. */
+/*  AUTO INPUT : le gain d'entrée se règle tout seul, comme un ingé qui cale son préampli au début de la prise.
+    Le niveau de la voix (moyenne en dB des passages chantés, mesurés par fenêtres de 50 ms, graves sous 80 Hz ignorés,
+    seuls les passages à moins de 15 dB du plus fort récent comptent) est ramené dans la zone BEST (-18 dBFS RMS).
+    - CALAGE RAPIDE : pendant la première seconde et demie de chant, le gain suit directement : la voix est dans la
+      zone presque tout de suite.
+    - PUIS IMMOBILE : le niveau habituel n'évolue plus que lentement (moyenne sur ~5 s de chant) et le gain ne bouge
+      que si la voix a VRAIMENT changé de niveau (plus de 2.5 dB d'écart durable : un autre couplet, un autre
+      chanteur, le micro déplacé). Pendant le chant, rien ne pompe : les nuances du chanteur restent les siennes.
+    - Un changement, quand il a lieu, glisse en 0.6 s. Bornes +/-18 dB ; tout est gelé dans les silences : le souffle
+      entre les phrases ne remonte jamais. */
 class AutoInput
 {
 public:
-    static constexpr float kTargetDb = -15.5f;   // passages forts (à 15 dB du plus fort) : la voix chantée autour de -18 dBFS RMS
+    static constexpr float kTargetDb = -13.5f;   // passages forts (à 15 dB du plus fort) : la voix chantée autour de -18 dBFS RMS
 
     void prepare (double fs)
     {
         hp.setCoeffs (BiquadCoeffs::highpass (fs, 80.0, 0.707));
         hp.reset();
         powC = coefFor (0.05, fs);
-        const double tick = kTick / fs;            // la mesure avance par pas de kTick échantillons
-        levelC = (float) (1.0 - std::exp (-tick / 1.5));
+        tick = kTick / fs;                                     // la mesure avance par pas de kTick échantillons
         fastC = (float) (1.0 - std::exp (-tick / 0.25));
-        maxFall = (float) (6.0 * tick);            // le niveau le plus fort récent redescend de 6 dB/s
-        gainC = coefFor (1.0, fs);
-        pow = 0.0f; levelDb = kTargetDb; recentMax = -100.0f; gainDb = 0.0f; target = 0.0f; settled = false; count = 0;
+        slowC = (float) (1.0 - std::exp (-tick / 5.0));
+        maxFall = (float) (6.0 * tick);                         // le niveau le plus fort récent redescend de 6 dB/s
+        gainC = coefFor (0.6 / 3.0, fs);                        // un changement glisse en ~0.6 s
+        pow = 0.0f; levelDb = kTargetDb; recentMax = -100.0f; gainDb = 0.0f; command = 0.0f; voiced = 0.0; count = 0;
     }
 
     // mesure du signal d'entrée (après le gain IN) ; renvoie le gain à appliquer (linéaire)
@@ -48,15 +53,17 @@ public:
             count = 0;
             const float lvl = 10.0f * std::log10 (pow + 1.0e-12f);   // RMS de 50 ms, en dBFS
             recentMax = std::max (lvl, recentMax - maxFall);
-            // seuls les passages chantés comptent : au-dessus de -65 dBFS et à moins de 15 dB du plus fort récent
-            if (lvl > -65.0f && lvl > recentMax - 15.0f)
+            if (lvl > -65.0f && lvl > recentMax - 15.0f)             // un passage chanté
             {
-                levelDb += (settled ? levelC : fastC) * (lvl - levelDb);
-                if (std::abs (lvl - levelDb) < 3.0f) settled = true;
+                if (voiced <= 0.0) levelDb = lvl;
+                const bool settling = voiced < 1.5;
+                levelDb += (settling ? fastC : slowC) * (lvl - levelDb);
+                voiced += tick;
+                const float want = juce::jlimit (-18.0f, 18.0f, kTargetDb - levelDb);
+                if (settling || std::abs (want - command) > 2.5f) command = want;
             }
-            target = on ? juce::jlimit (-18.0f, 18.0f, kTargetDb - levelDb) : 0.0f;
         }
-        gainDb += gainC * (target - gainDb);
+        gainDb += gainC * ((on ? command : 0.0f) - gainDb);
         return dbToGain (gainDb);
     }
     float getGainDb() const noexcept { return gainDb; }
@@ -64,10 +71,10 @@ public:
 private:
     static constexpr int kTick = 32;
     Biquad hp;
-    float powC = 0, levelC = 0, fastC = 0, maxFall = 0, gainC = 0;
-    float pow = 0, levelDb = kTargetDb, recentMax = -100.0f, gainDb = 0, target = 0;
+    float powC = 0, fastC = 0, slowC = 0, maxFall = 0, gainC = 0;
+    float pow = 0, levelDb = kTargetDb, recentMax = -100.0f, gainDb = 0, command = 0;
+    double tick = 0.0, voiced = 0.0;
     int count = 0;
-    bool settled = false;
 };
 
 /*  La chaîne complète de VOCAL MINI :

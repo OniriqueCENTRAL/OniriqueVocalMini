@@ -26,6 +26,10 @@ namespace onirique
       l'entend.
     - ATTAQUE SELON LE NIVEAU : la cellule s'allume plus vite quand le dépassement est fort (un cri, une consonne
       explosive est saisi en ~4 ms), et garde ses ~10 ms sur une montée douce : rien ne déborde, rien n'est écrasé.
+    - NIVELLEMENT : le détecteur mêle la crête (30 %) et le niveau moyen sur 8 ms (70 %) : la cellule suit le CORPS de la
+      voix (comme un niveleur de console) plutôt que chaque pointe, la voix est tenue dans un bloc régulier. La mémoire
+      de la photorésistance compte moins (0.3 au lieu de 0.5) : après un long silence, la reprise est traitée comme le
+      reste de la phrase, sans être plus forte.
     - LAMPES VIVANTES : l'harmonique 2 des lampes grandit avec le niveau (au lieu d'être constante) : discrète sur
       une voix douce, chaleureuse quand elle pousse. Le transformateur de sortie arrondit les crêtes.
 */
@@ -46,12 +50,13 @@ public:
         mUp = coef (1.5);
         mDown = coef (3.5);
         lvlC = coef (0.050);
+        msC = coef (0.008);
         reset();
     }
 
     void reset() noexcept
     {
-        L = M = gr = lvl = 0.0f;
+        L = M = gr = lvl = ms = 0.0f;
         dc.reset(); scHp.reset(); scHf.reset();
         grMeter.store (0.0f, std::memory_order_relaxed);
     }
@@ -77,8 +82,10 @@ public:
 
             float pk = 0.0f;
             for (int c = 0; c < numCh; ++c) pk = std::max (pk, std::abs (scHf.process (scHp.process (ch[c][i], c), c)));
+            ms += msC * (pk * pk - ms);
+            const float det = std::sqrt (0.3f * pk * pk + 0.7f * 2.0f * ms);   // crête et corps mêlés
             // PEAK REDUCTION = gain du détecteur : à 0 rien ne compresse, à 100 le seuil est à -45 dBFS
-            const float over = (pk > 1.0e-6f ? gainToDb (pk) : -120.0f) - (0.0f - 0.45f * pr);
+            const float over = (det > 1.0e-6f ? gainToDb (det) : -120.0f) - (0.0f - 0.45f * pr);
 
             const float outEst = over - gr;
             const float kk = k * juce::jlimit (0.0f, 1.0f, (outEst + 0.5f * knee) / knee);
@@ -96,7 +103,7 @@ public:
             }
             L = juce::jlimit (0.0f, 40.0f, next);
             M += (L > M ? mUp : mDown) * (L - M);
-            gr = std::max (L, 0.5f * M);
+            gr = std::max (L, 0.3f * M);
             peakGr = std::max (peakGr, gr);
 
             const float g = dbToGain (-gr);
@@ -122,8 +129,8 @@ private:
 
     double fs = 44100.0;
     bool limit = false;
-    float lAtkSlow = 0, lAtkFast = 0, lRel = 0, mUp = 0, mDown = 0, lvlC = 0;
-    float L = 0, M = 0, gr = 0, lvl = 0;
+    float lAtkSlow = 0, lAtkFast = 0, lRel = 0, mUp = 0, mDown = 0, lvlC = 0, msC = 0;
+    float L = 0, M = 0, gr = 0, lvl = 0, ms = 0;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> gainS { 1.0f };
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> prS;
     Biquad dc, scHp, scHf;

@@ -35,6 +35,7 @@ public:
         fAtk = coefFor (0.00005, fs); fRel = coefFor (0.002, fs); sAtk = coefFor (0.003, fs); sRel = coefFor (0.030, fs);
         tAtk = coefFor (0.00004, fs); tRel = coefFor (0.012, fs);
         refC = coefFor (0.3, fs);
+        fastPowC = coefFor (0.010, fs);
         split = fs < 60000.0;
         splitA.setCoeffs (BiquadCoeffs::lowpass (fs, 7000.0, 0.5412));   // Butterworth 4e ordre
         splitB.setCoeffs (BiquadCoeffs::lowpass (fs, 7000.0, 1.3066));
@@ -47,6 +48,7 @@ public:
         xfLp[0] = xfLp[1] = 0.0f;
         envF = envS = trans = 0.0f;
         refPow = 0.06f;
+        fastPow = 0.0f;
         match.reset();
     }
 
@@ -66,7 +68,10 @@ public:
             envS += (mx > envS ? sAtk : sRel) * (mx - envS);
             const float tr = juce::jlimit (0.0f, 1.0f, envF / (envS + 1.0e-4f) - 1.2f);
             trans += (tr > trans ? tAtk : tRel) * (tr - trans);
-            refPow += refC * (pin * inv - refPow);
+            // niveau de référence de la normalisation : appris pendant le chant seulement (gelé dans les silences, la
+            // reprise sort au même niveau que la phrase d'avant)
+            fastPow += fastPowC * (pin * inv - fastPow);
+            if (fastPow > 1.0e-6f && fastPow > 0.03f * refPow) refPow += refC * (pin * inv - refPow);
 
             // gain d'attaque jusqu'à +24 dB, normalisé sur le niveau crête habituel de la voix
             const float k = dbToGain (24.0f * d);
@@ -109,7 +114,7 @@ private:
     Biquad splitA, splitB;
     bool split = false;
     float fAtk = 0, fRel = 0, sAtk = 0, sRel = 0, tAtk = 0, tRel = 0, refC = 0;
-    float envF = 0, envS = 0, trans = 0, refPow = 0.06f;
+    float envF = 0, envS = 0, trans = 0, refPow = 0.06f, fastPow = 0.0f, fastPowC = 0.0f;
     bool wasIdle = true;
 };
 

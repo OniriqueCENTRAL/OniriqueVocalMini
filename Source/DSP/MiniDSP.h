@@ -70,7 +70,9 @@ private:
 
 /*  Niveau de sortie ramené au niveau d'entrée (puissance moyenne lente), pour qu'un effet s'entende sans changer le
     volume. Le niveau mesuré est celui de la sortie déjà corrigée : la correction s'ajuste jusqu'à ce que les deux
-    moyennes soient égales. Gelée dans les silences (sous -70 dBFS) : rien ne remonte le souffle entre les phrases. */
+    moyennes soient égales. Elle n'apprend QUE pendant le chant (niveau sur 10 ms au-dessus de -60 dBFS et à moins de
+    20 dB du chant récent) : dans les silences et les fins de phrases, tout est gelé. Rien ne dérive pendant une pause,
+    la reprise sort exactement au même niveau que la phrase d'avant. */
 class LevelMatch
 {
 public:
@@ -78,13 +80,18 @@ public:
     {
         c = coefFor (seconds, fs);
         step = (float) (32.0 / (glide * fs));
-        pin = pout = 0.0f; g = 1.0f; count = 0;
+        fastC = coefFor (0.010, fs);
+        refFall = (float) std::exp (-1.0 / (3.0 * fs));
+        reset();
     }
-    void reset() noexcept { pin = pout = 0.0f; g = 1.0f; count = 0; }
+    void reset() noexcept { pin = pout = fast = ref = 0.0f; g = 1.0f; count = 0; }
     // inPow / outPow : puissances instantanées (moyenne des canaux) ; renvoie le gain à appliquer à la sortie
     float next (float inPow, float outPow, float lo = 0.1f, float hi = 4.0f) noexcept
     {
-        if (inPow > 1.0e-7f || pin > 1.0e-7f)
+        fast += fastC * (inPow - fast);
+        ref = std::max (fast, ref * refFall);
+        const bool singing = fast > 1.0e-6f && fast > 0.01f * ref;
+        if (singing)
         {
             pin += c * (inPow - pin);
             pout += c * (outPow * g * g - pout);
@@ -92,7 +99,7 @@ public:
         if (++count >= 32)
         {
             count = 0;
-            if (pin > 1.0e-7f && pout > 1.0e-10f)
+            if (singing && pin > 1.0e-7f && pout > 1.0e-10f)
                 g = juce::jlimit (lo, hi, g * std::pow (pin / pout, 0.5f * step));
         }
         return g;
@@ -101,6 +108,7 @@ public:
 
 private:
     float c = 0.001f, step = 0.001f, pin = 0.0f, pout = 0.0f, g = 1.0f;
+    float fastC = 0.01f, refFall = 0.9999f, fast = 0.0f, ref = 0.0f;
     int count = 0;
 };
 
