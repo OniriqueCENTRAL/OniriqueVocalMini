@@ -1,0 +1,6 @@
+build/
+build-check/
+build-check.log
+dist/
+*.zip
+apercu/
