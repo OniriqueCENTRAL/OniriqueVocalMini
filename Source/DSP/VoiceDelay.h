@@ -55,6 +55,9 @@ public:
         div = juce::jlimit (0, kNumDivisions - 1, division);
         tempo = juce::jlimit (30.0, 300.0, bpm);
         if (snap) timeS.setCurrentAndTargetValue (timeSamples()); else timeS.setTargetValue (timeSamples());
+        // le retour remonte moins vite que les répétitions ne s'éteignent : à l'arrêt de la voix, l'écho ne regonfle pas
+        const float decayDbPerSec = -20.0f * std::log10 (std::max (fb, 0.001f)) / (timeSamples() / (float) fs);
+        duck.setMaxRise (juce::jlimit (1.0f, 40.0f, 0.7f * decayDbPerSec));
         tone = juce::jlimit (-1.0f, 1.0f, tone);
         if (tone != lastTone) updateFilters (tone);
     }

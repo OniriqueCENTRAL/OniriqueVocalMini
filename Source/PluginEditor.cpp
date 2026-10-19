@@ -23,7 +23,8 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     addAndMakeVisible (orb);
     addAndMakeVisible (presetBar);
     addAndMakeVisible (modeSel);
-    for (auto* b : { &lowCut, &autoInput, &ping }) addAndMakeVisible (*b);
+    for (auto* b : { &bypassBtn, &lowCut, &autoInput, &ping }) addAndMakeVisible (*b);
+    bypassBtn.setTooltip ("Bypass: hear the untouched voice to compare (click-free, aligned with the latency).");
     lowCut.setTooltip ("Low cut at 90 Hz (18 dB/oct): removes rumble, pops and handling noise.");
     autoInput.setTooltip ("AUTO INPUT: the input gain sets itself, slowly, like an engineer on a fader, to keep the voice in the BEST "
                           "zone. Frozen in the silences: the noise between phrases never comes up.");
@@ -31,6 +32,7 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     buttonAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (st, ids::lowCut, lowCut));
     buttonAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (st, ids::autoInput, autoInput));
     buttonAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (st, ids::ping, ping));
+    buttonAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (st, ids::bypass, bypassBtn));
 
     auto& chain = processor.getChain();
     deess.activity   = [&chain] { return chain.getDeEssReductionDb() / 6.0f; };
@@ -50,7 +52,7 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     addAndMakeVisible (time);
     addAndMakeVisible (inBar);
     addAndMakeVisible (outBar);
-    for (auto* a : std::initializer_list<Animated*> { &orb, &presetBar, &modeSel, &lowCut, &autoInput, &ping, &time, &inBar, &outBar })
+    for (auto* a : std::initializer_list<Animated*> { &orb, &presetBar, &modeSel, &bypassBtn, &lowCut, &autoInput, &ping, &time, &inBar, &outBar })
         animated.push_back (a);
 
     // redimensionnable, proportions verrouillées. La taille mémorisée est lue AVANT tout appel qui redimensionne.
@@ -109,6 +111,7 @@ void OniriqueVocalMiniAudioProcessorEditor::resized()
     // ---- en-tête
     logoRect = { 22.0f * u, 15.0f * u, 42.0f * u * 985.0f / 895.0f, 42.0f * u };
     modeSel.setBounds (R (262, 19, 132, 34));
+    bypassBtn.setBounds (R (406, 20, 104, 32));
     const float badgeW = licenseOverlay != nullptr ? (float) licenseOverlay->pillWidth() : 0.0f;
     const float badgeRight = W / u - 20.0f;
     if (licenseOverlay != nullptr)

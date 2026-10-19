@@ -112,28 +112,44 @@ private:
     int count = 0;
 };
 
-// l'effet s'efface sous la voix : réduction selon le niveau de la voix au-dessus de -40 dBFS (jusqu'à -24 dB)
+// l'effet s'efface sous la voix : réduction selon le niveau de la voix au-dessus de -40 dBFS (jusqu'à -24 dB).
+// Le retour descend vite (20 ms) quand la voix arrive, mais REMONTE au plus à maxRise dB/s : réglé sous la vitesse
+// d'extinction de la queue, il ne peut jamais faire regonfler une reverb ou un écho quand la voix s'arrête net (pause
+// du DAW, fin de phrase) : la queue ne fait que s'éteindre, sans bond. Et il attend 200 ms que la voix soit vraiment
+// arrêtée avant de commencer à remonter (pendant que la queue se remplit encore de la dernière syllabe).
 class Ducker
 {
 public:
-    void prepare (double fs) { atk = coefFor (0.010, fs); rel = coefFor (0.300, fs); gs = coefFor (0.020, fs); env = 0.0f; g = 1.0f; }
-    void reset() noexcept { env = 0.0f; g = 1.0f; }
+    void prepare (double sampleRate, float maxRiseDbPerSec = 20.0f)
+    {
+        fs = sampleRate;
+        atk = coefFor (0.010, fs); rel = coefFor (0.300, fs); fall = coefFor (0.020, fs);
+        holdLen = (int) (0.2 * fs);
+        setMaxRise (maxRiseDbPerSec);
+        reset();
+    }
+    void setMaxRise (float dbPerSec) noexcept { rise = std::max (0.5f, dbPerSec) / (float) fs; }
+    void reset() noexcept { env = 0.0f; gDb = 0.0f; held = 0; }
     float next (float key, float depth) noexcept
     {
         const float a = std::abs (key);
         env += (a > env ? atk : rel) * (a - env);
-        float target = 1.0f;
+        float targetDb = 0.0f;
         if (depth > 0.001f)
         {
             const float over = gainToDb (env + 1.0e-9f) + 40.0f;
-            target = dbToGain (-std::min (24.0f * depth, 0.6f * std::max (0.0f, over)));
+            targetDb = -std::min (24.0f * depth, 0.6f * std::max (0.0f, over));
         }
-        g += gs * (target - g);
-        return g;
+        if (targetDb < gDb - 0.05f) { gDb += fall * (targetDb - gDb); held = 0; }
+        else if (held < holdLen) ++held;
+        else gDb = std::min (targetDb, gDb + rise);
+        return dbToGain (gDb);
     }
 
 private:
-    float atk = 0.01f, rel = 0.001f, gs = 0.01f, env = 0.0f, g = 1.0f;
+    double fs = 48000.0;
+    float atk = 0.01f, rel = 0.001f, fall = 0.01f, rise = 0.0004f, env = 0.0f, gDb = 0.0f;
+    int holdLen = 9600, held = 0;
 };
 
 // valeur lissée linéairement, prête à l'emploi (0..1 en général)

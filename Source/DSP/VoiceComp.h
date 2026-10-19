@@ -16,7 +16,8 @@ namespace onirique::mini
     2) FET (modèle de 1176 retravaillé) : attrape les crêtes que le niveleur laisse passer (consonnes, attaques), 4:1,
        attaque rapide, relâchement vif ; le bouton y pousse un peu plus la voix.
     3) GARDE : un dernier étage très rapide, à genou doux, qui tient les pointes restantes sous un plafond (de -4 à
-       -8 dBFS avec le bouton) : rien ne dépasse du bloc, même à la reprise après un silence.
+       -8 dBFS avec le bouton) : rien ne dépasse du bloc, même à la reprise après un silence. Une pointe brève (un K,
+       un T) est relâchée en 20 ms : la syllabe qui suit garde son niveau, pas de pompage sur les consonnes dures.
     4) PRÉSENCE GARDÉE : une voix tenue perd un peu de présence (les voyelles fortes, riches en 1-4 kHz, sont celles qui
        descendent le plus) ; une cloche large à 2.5 kHz la rend à mesure qu'on monte le bouton (jusqu'à +1.4 dB) : la
        voix reste devant au lieu de reculer.
@@ -36,13 +37,15 @@ public:
         amt.prepare (fs, 0.08, amt.target());
         catchAtk = coefFor (0.0002, fs);
         catchRel = coefFor (0.060, fs);
-        catchGr = 0.0f;
+        catchBrief = coefFor (0.020, fs);
+        catchSlowC = coefFor (0.040, fs);
+        catchGr = catchSlow = 0.0f;
         presence.reset();
         lastA = -1.0f;
         apply (amt.target(), true);
     }
 
-    void reset() noexcept { fet.reset(); opto.reset(); presence.reset(); catchGr = 0.0f; }
+    void reset() noexcept { fet.reset(); opto.reset(); presence.reset(); catchGr = catchSlow = 0.0f; }
 
     void set (float amount01, bool snap) noexcept
     {
@@ -88,7 +91,10 @@ public:
                 float target = 0.0f;
                 if (over > 1.5f) target = 0.875f * over;
                 else if (over > -1.5f) target = 0.875f * (over + 1.5f) * (over + 1.5f) / 6.0f;
-                catchGr += (target > catchGr ? catchAtk : catchRel) * (target - catchGr);
+                // une pointe brève (consonne) est relâchée en 20 ms : la voyelle qui suit n'est pas touchée
+                const float brief = catchGr > 0.3f ? juce::jlimit (0.0f, 1.0f, 2.0f * (catchGr - catchSlow) / catchGr) : 0.0f;
+                catchGr += (target > catchGr ? catchAtk : catchRel + brief * (catchBrief - catchRel)) * (target - catchGr);
+                catchSlow += catchSlowC * (catchGr - catchSlow);
                 peakCatch = std::max (peakCatch, catchGr);
                 const float g = mk * dbToGain (-catchGr);
                 const float mix = std::min (1.0f, w * 20.0f);   // de 0 à 5 % : on entre en fondu dans le module
@@ -114,7 +120,7 @@ private:
     OptoCompressor opto;
     Biquad presence;
     Smooth amt;
-    float catchAtk = 0.0f, catchRel = 0.0f, catchGr = 0.0f;
+    float catchAtk = 0.0f, catchRel = 0.0f, catchBrief = 0.0f, catchSlowC = 0.0f, catchGr = 0.0f, catchSlow = 0.0f;
     float lastA = -1.0f;
     bool wasIdle = true;
     std::atomic<float> grMeter { 0.0f };

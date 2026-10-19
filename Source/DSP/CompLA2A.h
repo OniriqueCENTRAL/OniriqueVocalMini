@@ -21,12 +21,11 @@ namespace onirique
 
     Ce qui est nouveau :
     - DÉTECTEUR VOCAL : comme la compensation d'aigus du circuit de détection des vrais appareils, le détecteur est
-      un peu plus sensible au-dessus de 3 kHz (+4 dB), et ignore le grave sous 60 Hz. La cellule nivelle la présence
-      et les passages perçants en douceur, sans se laisser tirer par le grave : la voix est tenue là où l'oreille
-      l'entend.
+      légèrement plus sensible au-dessus de 3 kHz (+1.5 dB : assez pour niveler la présence, trop peu pour qu'une
+      consonne le déclenche), et ignore le grave sous 60 Hz.
     - ATTAQUE SELON LE NIVEAU : la cellule s'allume plus vite quand le dépassement est fort (un cri, une consonne
       explosive est saisi en ~4 ms), et garde ses ~10 ms sur une montée douce : rien ne déborde, rien n'est écrasé.
-    - NIVELLEMENT : le détecteur mêle la crête (30 %) et le niveau moyen sur 8 ms (70 %) : la cellule suit le CORPS de la
+    - NIVELLEMENT : le détecteur mêle la crête (15 %) et le niveau moyen sur 12 ms (85 %) : la cellule suit le CORPS de la
       voix (comme un niveleur de console) plutôt que chaque pointe, la voix est tenue dans un bloc régulier. La mémoire
       de la photorésistance compte moins (0.3 au lieu de 0.5) : après un long silence, la reprise est traitée comme le
       reste de la phrase, sans être plus forte.
@@ -43,14 +42,14 @@ public:
         prS.reset (fs, 0.05);
         dc.setCoeffs (BiquadCoeffs::highpass (fs, 10.0, 0.707));
         scHp.setCoeffs (BiquadCoeffs::highpass (fs, 60.0, 0.707));
-        scHf.setCoeffs (BiquadCoeffs::highShelf (fs, std::min (3000.0, 0.4 * fs), 0.7, 4.0));
+        scHf.setCoeffs (BiquadCoeffs::highShelf (fs, std::min (3000.0, 0.4 * fs), 0.7, 1.5));
         lAtkSlow = coef (0.010);
         lAtkFast = coef (0.004);
         lRel = coef (0.060);
         mUp = coef (1.5);
         mDown = coef (3.5);
         lvlC = coef (0.050);
-        msC = coef (0.008);
+        msC = coef (0.012);
         reset();
     }
 
@@ -83,7 +82,7 @@ public:
             float pk = 0.0f;
             for (int c = 0; c < numCh; ++c) pk = std::max (pk, std::abs (scHf.process (scHp.process (ch[c][i], c), c)));
             ms += msC * (pk * pk - ms);
-            const float det = std::sqrt (0.3f * pk * pk + 0.7f * 2.0f * ms);   // crête et corps mêlés
+            const float det = std::sqrt (0.15f * pk * pk + 0.85f * 2.0f * ms);   // surtout le corps, un peu la crête
             // PEAK REDUCTION = gain du détecteur : à 0 rien ne compresse, à 100 le seuil est à -45 dBFS
             const float over = (det > 1.0e-6f ? gainToDb (det) : -120.0f) - (0.0f - 0.45f * pr);
 

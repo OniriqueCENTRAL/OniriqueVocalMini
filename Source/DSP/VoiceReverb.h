@@ -62,7 +62,7 @@ public:
         static constexpr float outApMs[4] { 3.1f, 4.7f, 3.9f, 5.3f };
         for (int a = 0; a < 4; ++a) outAp[a].prepare ((int) (outApMs[a] * 0.001 * fs));
         send.prepare (fs, 0.05, send.target());
-        duck.prepare (fs);
+        duck.prepare (fs, 0.7f * 60.0f / ch.rt);   // le retour remonte moins vite que la queue ne s'éteint : jamais de bond
         design();
         reset();
     }

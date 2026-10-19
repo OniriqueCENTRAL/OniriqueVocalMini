@@ -27,6 +27,10 @@ namespace onirique
       « grésillement » de modulation aux relâchements rapides, la compression reste lisse et chantante.
     - RELÂCHEMENT À MÉMOIRE : quand la compression dure (une phrase entière), une mémoire lente se charge et le
       relâchement s'allonge (jusqu'à 1.8x) ; sur un mot isolé il reste vif. Fini le pompage en fin de phrase.
+    - CONSONNES IGNORÉES : une réduction très brève (un K, un T, une attaque de consonne) se relâche en 25 ms au lieu du
+      relâchement normal : la voyelle qui suit n'est pas étouffée, aucun « pompage » sur les syllabes dures. Une
+      réduction qui dure (une phrase forte) garde son relâchement normal. Le détecteur est aussi un peu moins sensible
+      aux aigus (-3 dB au-dessus de 4 kHz) : les consonnes, riches en aigus, ne le déclenchent plus autant que la voix.
     - FER DE SORTIE : le transformateur ne sature que dans le grave (< 120 Hz), un peu plus quand la réduction est
       forte : la voix comprimée garde son poids au lieu de s'amincir. L'étage classe A arrondit les crêtes.
 */
@@ -40,6 +44,9 @@ public:
         outS.reset (fs, 0.03);
         dc.setCoeffs (BiquadCoeffs::highpass (fs, 10.0, 0.707));
         scHp.setCoeffs (BiquadCoeffs::highpass (fs, 90.0, 0.707));
+        scHf.setCoeffs (BiquadCoeffs::highShelf (fs, std::min (4000.0, 0.4 * fs), 0.7, -3.0));
+        slowC = (float) (1.0 - std::exp (-1.0 / (0.040 * fs)));
+        briefRel = (float) (1.0 - std::exp (-1.0 / (0.025 * fs)));
         rmsC = (float) (1.0 - std::exp (-1.0 / (0.003 * fs)));
         memUp = (float) (1.0 - std::exp (-1.0 / (0.8 * fs)));
         memDown = (float) (1.0 - std::exp (-1.0 / (2.5 * fs)));
@@ -50,8 +57,8 @@ public:
 
     void reset() noexcept
     {
-        gr = mem = ms = 0.0f;
-        dc.reset(); scHp.reset();
+        gr = mem = ms = grSlow = 0.0f;
+        dc.reset(); scHp.reset(); scHf.reset();
         iron[0] = iron[1] = 0.0f;
         grMeter.store (0.0f, std::memory_order_relaxed);
     }
@@ -92,7 +99,7 @@ public:
             float pk = 0.0f, p2 = 0.0f;
             for (int c = 0; c < numCh; ++c)
             {
-                const float s = scHp.process (ch[c][i] * gi, c);
+                const float s = scHf.process (scHp.process (ch[c][i] * gi, c), c);
                 pk = std::max (pk, std::abs (s));
                 p2 = std::max (p2, s * s);
             }
@@ -106,7 +113,10 @@ public:
             const float kk = k * juce::jlimit (0.0f, 1.0f, (outEst + 0.5f * knee) / knee);
 
             float next;
-            const float rel = relCoef();
+            // réduction brève (consonne) : relâchement rapide ; réduction qui dure : relâchement normal
+            const float brief = gr > 0.5f ? juce::jlimit (0.0f, 1.0f, 2.0f * (gr - grSlow) / gr) : 0.0f;
+            const float rn = relCoef();
+            const float rel = rn + brief * (briefRel - rn);
             if (over <= 0.0f)
                 next = gr * (1.0f - rel);
             else
@@ -117,6 +127,7 @@ public:
                 if (next < gr) next = solve (rel);
             }
             gr = juce::jlimit (0.0f, 40.0f, next);
+            grSlow += slowC * (gr - grSlow);
             mem += (gr > mem ? memUp : memDown) * (gr - mem);
             peakGr = std::max (peakGr, gr);
 
@@ -158,8 +169,9 @@ private:
     int ratio = 0;
     float atk = 0.5f, relBase = 0.2f, gr = 0.0f, mem = 0.0f, ms = 0.0f;
     float rmsC = 0.0f, memUp = 0.0f, memDown = 0.0f, ironC = 0.0f, iron[2] {};
+    float slowC = 0.0f, briefRel = 0.0f, grSlow = 0.0f;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> inS { 1.0f }, outS { 1.0f };
-    Biquad dc, scHp;
+    Biquad dc, scHp, scHf;
     std::atomic<float> grMeter { 0.0f };
 };
 } // namespace onirique

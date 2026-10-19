@@ -30,6 +30,7 @@ private:
         { "LIVE: zero latency, to record while listening to yourself through VOCAL MINI. Already the full sound.",
           "MIX: maximum quality once the recording is done (oversampled core, de-esser that sees the S coming). "
           "About 1 ms of latency, compensated by your DAW." } };
+    PillToggle bypassBtn { "BYPASS", PillToggle::Style::small };
     PillToggle lowCut { "LOW CUT", PillToggle::Style::small }, autoInput { "AUTO INPUT", PillToggle::Style::small },
                ping { "PING-PONG", PillToggle::Style::small };
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAtts;
