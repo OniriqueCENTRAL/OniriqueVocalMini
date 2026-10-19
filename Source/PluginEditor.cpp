@@ -66,16 +66,14 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     window::remember (processor.apvts.state, getWidth(), getHeight());
 
     // Licence : pastille et page d'activation, par-dessus tout le reste.
-   #if ! ONIRIQUE_NO_LICENSE   // copie personnelle de l'équipe : ni pastille ni page d'activation
     licenseOverlay = std::make_unique<license::Overlay> ("ONIRIQUE VOCAL MINI", processor.license);
     addAndMakeVisible (*licenseOverlay);
-   #endif
     resized();
 
    #if ONIRIQUE_UI_TEST
     // essais locaux uniquement (jamais dans les versions publiées) : captures et visuel de démo sans la page d'activation
     const auto test = juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {});
-    if (test.contains ("nolicense") && licenseOverlay != nullptr) licenseOverlay->setVisible (false);
+    if (test.contains ("nolicense")) licenseOverlay->setVisible (false);
     if (test.contains ("static")) orb.frozen = true;
    #endif
 

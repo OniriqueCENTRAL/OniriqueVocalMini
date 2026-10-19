@@ -86,10 +86,3 @@ target_link_libraries(OniriqueVocalMini
 # Licence ONIRIQUE : vérification du fichier écrit par ONIRIQUE CENTRAL, pastille et page d'activation.
 include(License/OniriqueLicense.cmake)
 onirique_add_license(OniriqueVocalMini)
-
-# Copie personnelle de l'équipe (avant la sortie, pour s'en servir dans ses propres sessions) : sans vérification de
-# licence. Jamais dans les versions publiées : GitHub Actions ne l'active pas (cmake -DONIRIQUE_PERSONAL=ON en local).
-option(ONIRIQUE_PERSONAL "Copie personnelle de l'équipe, sans licence (jamais publiée)" OFF)
-if(ONIRIQUE_PERSONAL)
-    target_compile_definitions(OniriqueVocalMini PRIVATE ONIRIQUE_NO_LICENSE=1)
-endif()

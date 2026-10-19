@@ -4,5 +4,3 @@ build-check.log
 dist/
 *.zip
 apercu/
-build-perso/
-build-perso.log
