@@ -684,13 +684,13 @@ void EqDisplay::paint (juce::Graphics& g)
         juce::Graphics::ScopedSaveState ss (g);
         g.reduceClipRegion (plot.toNearestInt());
 
-        // ---- spectres : la voix qui entre (voile gris), celle qui sort (dégradé clair + trait net)
+        // ---- spectres : la voix qui entre (trait gris discret), celle qui sort (dégradé clair + trait net)
         const auto yIn = yArr (specIn, true), yOut = yArr (specOut, true);
         const auto pIn = smoothPath (yIn), pOut = smoothPath (yOut);
-        g.setGradientFill (juce::ColourGradient (ui::haze.withAlpha (0.15f), 0.0f, plot.getY(), ui::haze.withAlpha (0.0f), 0.0f, plot.getBottom(), false));
-        g.fillPath (closeTo (pIn, plot.getBottom()));
-        g.setColour (ui::haze.withAlpha (0.40f));
-        g.strokePath (pIn, juce::PathStrokeType (std::max (1.0f, 1.0f * u)));
+        // entrée : un simple trait discret, sans surface ; seule la sortie est remplie (deux surfaces l'une sur l'autre
+        // brouillaient la lecture dès qu'une voix passait)
+        g.setColour (ui::haze.withAlpha (0.30f));
+        g.strokePath (pIn, juce::PathStrokeType (std::max (1.0f, 1.0f * u), juce::PathStrokeType::curved));
         juce::ColourGradient og (ui::mist.withAlpha (0.22f), 0.0f, plot.getY(), ui::mist.withAlpha (0.01f), 0.0f, plot.getBottom(), false);
         og.addColour (0.55, ui::mist.withAlpha (0.08f));
         g.setGradientFill (og);
