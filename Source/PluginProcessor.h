@@ -32,7 +32,7 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 8.0; }   // queue de LUSH et répétitions du delay
+    double getTailLengthSeconds() const override { return 12.0; }   // DECAY de la reverb (jusqu'à 12 s) et répétitions du delay
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -58,13 +58,7 @@ public:
 private:
     onirique::mini::MiniChain::Params readParams() const noexcept;
 
-    struct Raw
-    {
-        std::atomic<float> *in = nullptr, *out = nullptr, *autoIn = nullptr, *lowCut = nullptr, *low = nullptr, *mid = nullptr,
-                           *hi = nullptr, *air = nullptr, *comp = nullptr, *multi = nullptr, *deess = nullptr, *drive = nullptr,
-                           *phone = nullptr, *doubler = nullptr, *chorus = nullptr, *delay = nullptr, *feed = nullptr,
-                           *filter = nullptr, *time = nullptr, *ping = nullptr, *rev[4] {}, *bypass = nullptr, *mode = nullptr;
-    } raw;
+    std::array<std::atomic<float>*, onirique::prm::count> raw {};   // valeurs réelles de tous les paramètres (table de Parameters.h)
 
     // LIVE / MIX change la latence : la chaîne est reconfigurée sur le thread de l'interface (audio suspendu le temps
     // du changement), puis la nouvelle latence est annoncée au DAW
@@ -75,6 +69,7 @@ private:
 
     onirique::mini::MiniChain chain;
     std::atomic<double> bpmNow { 120.0 };
+    double ppqNow = -1.0;   // thread audio seulement
     std::atomic<bool> liveNow { true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OniriqueVocalMiniAudioProcessor)

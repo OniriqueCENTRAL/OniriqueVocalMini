@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Parameters.h"
+#include "FactoryPresets.h"
 
 namespace onirique
 {
@@ -9,7 +10,8 @@ namespace onirique
     %APPDATA%/Onirique/VocalMini/Presets). Thread de l'interface uniquement.
 
     - Un preset contient tous les réglages SAUF Bypass et le mode LIVE / MIX (réglages de session).
-    - Un paramètre absent d'un fichier reprend sa valeur par défaut.
+    - Un paramètre absent d'un fichier reprend sa valeur par défaut. Un preset enregistré avant VOCAL MINI PRO (les
+      quatre envois de reverb) est converti au chargement (prm::migrateLegacy).
     - Le nom du preset courant est rangé dans l'état du plugin : il revient avec le projet.
     - "Modifié" : comparaison des valeurs actuelles avec celles du chargement.
 */
@@ -58,8 +60,11 @@ public:
         if (e.factory)
             values = factory()[(size_t) e.factoryIndex].values;
         else if (auto xml = juce::XmlDocument::parse (e.file))
+        {
             for (auto* p : xml->getChildWithTagNameIterator ("PARAM"))
                 values[p->getStringAttribute ("id")] = (float) p->getDoubleAttribute ("value");
+            prm::migrateLegacy (values);
+        }
 
         applyValues (values, e.name);
     }
@@ -123,8 +128,6 @@ public:
     }
 
 private:
-    struct Factory { juce::String name; std::map<juce::String, float> values; };
-
     // tous les paramètres sauf Bypass
     std::vector<juce::RangedAudioParameter*> params() const
     {
@@ -137,13 +140,7 @@ private:
     }
 
     // valeurs en unités réelles (dB, %, 0..10, index de choix, 0/1)
-    static const std::vector<Factory>& factory()
-    {
-        static const std::vector<Factory> f = makeFactory();
-        return f;
-    }
-
-#include "FactoryPresets.inc"
+    static const std::vector<FactoryPreset>& factory() { return factoryPresets(); }
 
     juce::AudioProcessorValueTreeState& apvts;
     std::vector<float> snapshot;

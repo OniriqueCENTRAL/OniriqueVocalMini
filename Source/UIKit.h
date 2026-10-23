@@ -8,23 +8,35 @@
 namespace onirique::ui
 {
 // largeur de référence de la fenêtre : toutes les tailles de l'interface sont données pour elle, puis mises à l'échelle
-inline constexpr float kEditorBaseW = 1000.0f, kEditorBaseH = 620.0f;
+inline constexpr float kEditorBaseW = 1120.0f, kEditorBaseH = 700.0f;
 
-// ---- DA du site ONIRIQUE : nuit / sang, accent braise, lignes fines, lueurs
-inline const juce::Colour night  { 0xff0D0809 };
-inline const juce::Colour blood  { 0xff5C0008 };
-inline const juce::Colour deep   { 0xff1A080A };
-inline const juce::Colour deep2  { 0xff2A0A0E };
-inline const juce::Colour mist   { 0xffF6EEEE };
-inline const juce::Colour haze   { 0xffA88F92 };
-inline const juce::Colour ember  { 0xffE23444 };
-inline const juce::Colour bone   { 0xffFFECEE };
-inline const juce::Colour line   { (juce::uint8) 255, (juce::uint8) 210, (juce::uint8) 214, 0.13f };
+// ---- VOCAL MINI PRO : le noir et rouge d'ONIRIQUE, en plus moderne : noir profond, charbon neutre, rouge sombre pour la
+// profondeur ; le rouge vif est l'accent, utilisé avec mesure (arcs, témoins, choix actif) ; rose pâle pour les reflets ;
+// blanc cassé pour les textes, gris doux pour le secondaire. Pas de néon : des lueurs discrètes, du verre sombre.
+// (Les noms historiques sont gardés : « ember » est l'accent, « lilac » le reflet clair.)
+inline const juce::Colour night  { 0xff09080A };   // noir profond (fond)
+inline const juce::Colour blood  { 0xff3D0910 };   // rouge sombre (dégradés, profondeur)
+inline const juce::Colour deep   { 0xff121012 };   // charbon très sombre (panneaux)
+inline const juce::Colour deep2  { 0xff1C1517 };   // charbon chaud (menus, info-bulles, panneaux ouverts)
+inline const juce::Colour mist   { 0xffF2ECEC };   // blanc cassé (textes)
+inline const juce::Colour haze   { 0xff978C8F };   // gris doux (informations secondaires)
+inline const juce::Colour ember  { 0xffE5384A };   // rouge ONIRIQUE (accent)
+inline const juce::Colour lilac  { 0xffFFB3BC };   // rose pâle (queues de reverb, reflets, extrémités d'arcs)
+inline const juce::Colour bone   { 0xffFFF4F5 };   // blanc le plus clair (aiguilles, crêtes)
+inline const juce::Colour mint   { 0xff7DE3B6 };   // témoin discret « ça agit » (comme le voyant d'un rack)
+inline const juce::Colour line   { (juce::uint8) 255, (juce::uint8) 214, (juce::uint8) 218, 0.10f };
 
-// Polices : display (titres), body (libellés), mono (valeurs). Le site utilise Unbounded / Hanken
-// Grotesk / JetBrains Mono ; ici leurs équivalents système (tout passe par font()).
+// Polices : display (titres), body (libellés), mono (valeurs) : Unbounded, Hanken Grotesk et JetBrains Mono, les polices
+// du site ONIRIQUE (fournies avec le module de licence). Elles sont chargées par FontScope (une par interface ouverte,
+// rien de statique qui survive au déchargement du plugin) ; sans interface ouverte, des équivalents système.
 enum class Face { display, body, mono };
 juce::Font font (Face, float height, bool bold = false, float kerning = 0.0f);
+struct FontScope
+{
+    FontScope();
+    ~FontScope();
+    JUCE_DECLARE_NON_COPYABLE (FontScope)
+};
 float textWidth (const juce::Font&, const juce::String&);
 // police de hauteur maxH, réduite si nécessaire pour que le texte tienne dans maxW (jamais coupé)
 juce::Font fitFont (Face, float maxH, float maxW, const juce::String&, bool bold = false, float kerning = 0.0f);
@@ -33,8 +45,9 @@ juce::Font fitFont (Face, float maxH, float maxW, const juce::String&, bool bold
 // garde des libellés lisibles
 float editorScale (const juce::Component&);
 
-// trait lumineux : plusieurs passes de plus en plus larges et transparentes sous le trait net
-void strokeGlow (juce::Graphics&, const juce::Path&, juce::Colour, float width, float intensity);
+// trait lumineux : plusieurs passes de plus en plus larges et transparentes sous le trait net (jusqu'à 5.6 fois la largeur ;
+// maxWidth > 0 limite la passe la plus large, pour que le halo reste dans le composant au lieu d'être coupé net par son bord)
+void strokeGlow (juce::Graphics&, const juce::Path&, juce::Colour, float width, float intensity, float maxWidth = 0.0f);
 
 // ombre portée d'un rectangle arrondi (corner >= 0) ou d'une ellipse (corner < 0) : même rendu que
 // juce::DropShadow::drawForPath, mais le flou est calculé une seule fois par forme puis gardé en cache

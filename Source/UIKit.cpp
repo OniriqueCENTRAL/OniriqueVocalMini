@@ -2,6 +2,7 @@
 #include "OniriqueKnob.h"
 #include "OniriqueWindowSize.h"
 #include <BinaryData.h>
+#include <OniriqueLicenseData.h>
 #include <array>
 #include <map>
 
@@ -42,10 +43,45 @@ void drawValuePill (juce::Graphics& g, juce::Rectangle<float> r, const juce::Str
 } // namespace
 
 //==============================================================================
+namespace
+{
+// les polices de la charte, partagées par les interfaces ouvertes (thread de l'interface uniquement) : créées à
+// l'ouverture de la première, détruites à la fermeture de la dernière. Seuls un compteur et un pointeur brut sont
+// statiques : rien n'est détruit au déchargement du plugin.
+struct Faces
+{
+    juce::Typeface::Ptr display, body, mono, monoBold;
+};
+Faces* faces = nullptr;
+int faceUsers = 0;
+} // namespace
+
+ui::FontScope::FontScope()
+{
+    if (faceUsers++ == 0)
+    {
+        faces = new Faces();
+        faces->display = juce::Typeface::createSystemTypefaceFor (OniriqueLicenseData::Unbounded800_ttf, OniriqueLicenseData::Unbounded800_ttfSize);
+        faces->body = juce::Typeface::createSystemTypefaceFor (OniriqueLicenseData::HankenGrotesk600_ttf, OniriqueLicenseData::HankenGrotesk600_ttfSize);
+        faces->mono = juce::Typeface::createSystemTypefaceFor (OniriqueLicenseData::JetBrainsMono500_ttf, OniriqueLicenseData::JetBrainsMono500_ttfSize);
+        faces->monoBold = juce::Typeface::createSystemTypefaceFor (OniriqueLicenseData::JetBrainsMono600_ttf, OniriqueLicenseData::JetBrainsMono600_ttfSize);
+    }
+}
+
+ui::FontScope::~FontScope()
+{
+    if (--faceUsers == 0) { delete faces; faces = nullptr; }
+}
+
 juce::Font ui::font (Face f, float h, bool bold, float kerning)
 {
-    static const char* names[] { "Bahnschrift", "Segoe UI", "Cascadia Mono" };
-    juce::Font fnt (juce::FontOptions (names[(int) f], std::max (4.0f, h), bold ? juce::Font::bold : juce::Font::plain));
+    h = std::max (4.0f, h);
+    const juce::Typeface::Ptr tf = faces == nullptr ? nullptr
+                                 : f == Face::display ? faces->display : f == Face::body ? faces->body : (bold ? faces->monoBold : faces->mono);
+    // Unbounded est très large : un peu plus petit que la hauteur demandée, pour garder les mêmes encombrements
+    juce::Font fnt = tf != nullptr ? juce::Font (juce::FontOptions (tf).withHeight (f == Face::display ? h * 0.86f : h))
+                                   : juce::Font (juce::FontOptions (f == Face::display ? "Bahnschrift" : f == Face::body ? "Segoe UI" : "Cascadia Mono",
+                                                                    h, bold ? juce::Font::bold : juce::Font::plain));
     if (kerning != 0.0f) fnt.setExtraKerningFactor (kerning);
     return fnt;
 }
@@ -72,13 +108,14 @@ juce::Font ui::fitFont (Face face, float maxH, float maxW, const juce::String& t
     return f;
 }
 
-void ui::strokeGlow (juce::Graphics& g, const juce::Path& p, juce::Colour c, float width, float intensity)
+void ui::strokeGlow (juce::Graphics& g, const juce::Path& p, juce::Colour c, float width, float intensity, float maxWidth)
 {
     if (intensity <= 0.002f) return;
+    const float widest = maxWidth > 0.0f ? juce::jlimit (width, width * 5.6f, maxWidth) : width * 5.6f;
     for (int i = 4; i >= 1; --i)
     {
         g.setColour (c.withAlpha (juce::jlimit (0.0f, 1.0f, intensity * 0.17f / (float) i)));
-        g.strokePath (p, juce::PathStrokeType (width * (1.0f + 1.15f * (float) i), juce::PathStrokeType::curved,
+        g.strokePath (p, juce::PathStrokeType (width + (widest - width) * (float) i / 4.0f, juce::PathStrokeType::curved,
                                                juce::PathStrokeType::rounded));
     }
 }
@@ -217,7 +254,7 @@ void OniriqueLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rect
     {
         juce::Path p;
         p.addRoundedRectangle (r, r.getHeight() * 0.5f);
-        ui::strokeGlow (g, p, ui::ember, 1.0f, 0.45f);
+        ui::strokeGlow (g, p, ui::ember, 1.0f, 0.45f, 4.0f);   // 2 px de marge en haut et en bas : le halo y tient
         g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.38f), r.getX(), r.getY(),
                                                  ui::blood.withAlpha (0.35f), r.getRight(), r.getBottom(), false));
         g.fillPath (p);
@@ -624,12 +661,13 @@ void PillToggle::paintButton (juce::Graphics& g, bool highlighted, bool)
     const auto b = getLocalBounds().toFloat();
     const bool big = (style == Style::big);
     const float u = big ? std::min (b.getWidth() / 220.0f, b.getHeight() / 100.0f) : b.getHeight() / 36.0f;
-    const auto r = b.reduced (big ? 10.0f * u : (style == Style::mini ? 2.0f * u : 6.0f * u));
+    const float inset = big ? 10.0f * u : (style == Style::mini ? 2.0f * u : 6.0f * u);
+    const auto r = b.reduced (inset);
     const float radius = big ? 18.0f * u : r.getHeight() * 0.5f;
 
     juce::Path shape;
     shape.addRoundedRectangle (r, radius);
-    ui::strokeGlow (g, shape, ui::ember, 1.5f * u, on * 0.8f);
+    ui::strokeGlow (g, shape, ui::ember, 1.5f * u, on * 0.8f, 2.0f * inset);   // le halo s'éteint dans la marge
     g.setColour (juce::Colours::black.withAlpha (highlighted ? 0.28f : 0.36f));
     g.fillPath (shape);
     if (ripple > 0.0f)
@@ -956,10 +994,11 @@ void PresetBar::paint (juce::Graphics& g)
     }
 
     // SAVE
-    const auto s = zones[save].reduced (0.0f, 1.0f);
+    const float room = std::max (1.5f, 2.5f * u);   // marge au bord du composant : le halo s'y éteint au lieu d'être coupé
+    const auto s = zones[save].reduced (room);
     juce::Path sp;
     sp.addRoundedRectangle (s, s.getHeight() * 0.5f);
-    ui::strokeGlow (g, sp, ui::ember, 1.2f * u, glow[save] * 0.8f);
+    ui::strokeGlow (g, sp, ui::ember, 1.2f * u, glow[save] * 0.8f, 2.0f * room);
     g.setColour (juce::Colours::black.withAlpha (0.36f));
     g.fillPath (sp);
     g.setColour (ui::ember.withAlpha (0.18f * glow[save]));
@@ -1161,10 +1200,14 @@ void SegmentSelector::paint (juce::Graphics& g)
         pill = pill.withSizeKeepingCentre (pill.getWidth(), std::max (pill.getHeight() * 0.72f, std::min (pill.getHeight(), pill.getWidth() * 0.8f)));
     juce::Path pp;
     pp.addRoundedRectangle (pill, pill.getHeight() * 0.5f);
-    ui::strokeGlow (g, pp, ui::ember, 1.0f * u, 0.6f * dim);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffEE4555).withMultipliedAlpha (dim), pill.getX(), pill.getY(),
-                                             juce::Colour (0xffB81F30).withMultipliedAlpha (dim), pill.getX(), pill.getBottom(), false));
+    // pastille du choix : verre rouge sombre, liseré rouge, une lueur discrète (qui s'éteint avant le bord du composant)
+    const float room = std::min ({ pill.getX(), (float) getWidth() - pill.getRight(), pill.getY(), (float) getHeight() - pill.getBottom() });
+    ui::strokeGlow (g, pp, ui::ember, 1.0f * u, 0.45f * dim, 2.0f * room);
+    g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.30f * dim), pill.getX(), pill.getY(),
+                                             ui::blood.withAlpha (0.65f * dim), pill.getX(), pill.getBottom(), false));
     g.fillPath (pp);
+    g.setColour (ui::ember.interpolatedWith (ui::lilac, 0.35f).withMultipliedAlpha (dim));
+    g.strokePath (pp, juce::PathStrokeType (std::max (1.0f, 1.1f * u)));
 
     // une seule taille de texte pour tous les choix, qui tient dans la pastille (ronde si le segment est étroit)
     const float fitW = pill.getWidth() - 4.0f * u;
@@ -1180,7 +1223,7 @@ void SegmentSelector::paint (juce::Graphics& g)
         const juce::Rectangle<float> seg (a.getX() + segW * (float) i, a.getY(), segW, a.getHeight());
         const float sel = juce::jlimit (0.0f, 1.0f, 1.0f - std::abs (pos - (float) i));
         const auto base = i == hover ? ui::mist : ui::haze;
-        g.setColour (base.interpolatedWith (ui::night, sel).withMultipliedAlpha (dim));
+        g.setColour (base.interpolatedWith (ui::bone, sel).withMultipliedAlpha (dim));
         g.setFont (labelFont);
         g.drawText (labels[i], seg, juce::Justification::centred, false);
     }

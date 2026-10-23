@@ -54,6 +54,7 @@ target_sources(OniriqueVocalMini PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
     Source/MiniUI.cpp
+    Source/ParametricUI.cpp
     Source/UIKit.cpp)
 
 # logo du site (sigil blanc), intégré au binaire

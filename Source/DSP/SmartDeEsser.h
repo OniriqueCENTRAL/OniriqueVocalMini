@@ -7,9 +7,10 @@ namespace onirique::mini
 {
 /*  DE-ESS : un seul bouton, la fréquence se trouve toute seule.
 
-    - Cinq détecteurs (4.3, 5.3, 6.5, 8 et 9.8 kHz) mesurent où se trouve l'énergie des sifflantes ; le de-esser se
-      place au centre de gravité de ces énergies (moyenne en fréquence logarithmique, lissée en 20 ms). Une voix grave
-      aux S sourds et une voix fine aux S perçants sont traitées chacune à sa fréquence, sans réglage.
+    - Six détecteurs (3.4, 4.3, 5.3, 6.5, 8 et 9.8 kHz ; le 3.4 kHz attrape les « CH » et « J » du français, plus sourds
+      que les S, avec un poids réduit pour qu'une voyelle brillante ne l'attire pas) mesurent où se trouve l'énergie
+      des sifflantes ; le de-esser se place au centre de gravité de ces énergies (moyenne en fréquence logarithmique,
+      lissée en 20 ms). Une voix grave aux S sourds et une voix fine aux S perçants sont traitées chacune à sa fréquence, sans réglage.
     - Détection RELATIVE (énergie de la bande / énergie de la voix entière) : indépendante du niveau, seuls les S
       ressortent, pas les passages forts.
     - Action à bande divisée, en parallèle : y = x + (g - 1) * bande. Quand rien ne siffle, le signal passe intact ;
@@ -21,7 +22,7 @@ namespace onirique::mini
 class SmartDeEsser
 {
 public:
-    static constexpr int kDet = 5;
+    static constexpr int kDet = 6;
 
     // lookahead : anticipation en échantillons (0 en LIVE)
     void prepare (double sampleRate, int lookaheadSamples)
@@ -30,7 +31,7 @@ public:
         lookahead = std::max (0, lookaheadSamples);
         for (int c = 0; c < 2; ++c) { dx[c].prepare (lookahead); db[c].prepare (lookahead); }
         amt.prepare (fs, 0.03, amt.target());
-        static constexpr double f[kDet] { 4300.0, 5300.0, 6500.0, 8000.0, 9800.0 };
+        static constexpr double f[kDet] { 3400.0, 4300.0, 5300.0, 6500.0, 8000.0, 9800.0 };
         for (int b = 0; b < kDet; ++b)
         {
             det[b].setCoeffs (BiquadCoeffs::bandpass (fs, std::min (f[b], 0.42 * fs), 2.2));
@@ -82,7 +83,7 @@ public:
                 float m = 0.0f;
                 for (int c = 0; c < numCh; ++c) m = std::max (m, std::abs (det[b].process (ch[c][i], c)));
                 env[b] += (m > env[b] ? bandAtk : bandRel) * (m - env[b]);
-                const float w = env[b] * env[b];
+                const float w = env[b] * env[b] * (b == 0 ? 0.5f : 1.0f);
                 wSum += w;
                 wLog += w * logF[b];
             }
@@ -135,7 +136,7 @@ private:
 
     void updateCoeffs() noexcept
     {
-        const double f = juce::jlimit (3800.0, std::min (10500.0, 0.42 * fs), (double) std::exp (centreLog));
+        const double f = juce::jlimit (3500.0, std::min (10500.0, 0.42 * fs), (double) std::exp (centreLog));
         detN.setCoeffs (BiquadCoeffs::bandpass (fs, f, 1.4));          // détection étroite, centrée sur les S
         act.setCoeffs (BiquadCoeffs::bandpass (fs, std::min (f * 1.15, 0.42 * fs), 0.7));   // action large, un peu au-dessus
     }

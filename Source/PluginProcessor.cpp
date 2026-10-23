@@ -7,18 +7,9 @@ OniriqueVocalMiniAudioProcessor::OniriqueVocalMiniAudioProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "STATE", createLayout())
+      apvts (*this, nullptr, "STATE", prm::createLayout())
 {
-    auto r = [this] (const char* id) { return apvts.getRawParameterValue (id); };
-    raw.in = r (ids::inGain);     raw.out = r (ids::outGain);   raw.autoIn = r (ids::autoInput); raw.lowCut = r (ids::lowCut);
-    raw.low = r (ids::low);       raw.mid = r (ids::mid);       raw.hi = r (ids::hi);            raw.air = r (ids::air);
-    raw.comp = r (ids::comp);     raw.multi = r (ids::multi);   raw.deess = r (ids::deess);      raw.drive = r (ids::drive);
-    raw.phone = r (ids::phone);   raw.doubler = r (ids::doubler); raw.chorus = r (ids::chorus);
-    raw.delay = r (ids::delay);   raw.feed = r (ids::feed);     raw.filter = r (ids::filter);    raw.time = r (ids::time);
-    raw.ping = r (ids::ping);
-    raw.rev[0] = r (ids::rShort); raw.rev[1] = r (ids::rSmall); raw.rev[2] = r (ids::rBig);      raw.rev[3] = r (ids::rLush);
-    raw.bypass = r (ids::bypass);
-    raw.mode = r (ids::mode);
+    for (int i = 0; i < prm::count; ++i) raw[(size_t) i] = apvts.getRawParameterValue (prm::spec (i).id);
     apvts.addParameterListener (ids::mode, this);
 
     // l'état de départ est le preset « Lead Clean Vocal » (les valeurs par défaut des paramètres)
@@ -26,10 +17,10 @@ OniriqueVocalMiniAudioProcessor::OniriqueVocalMiniAudioProcessor()
     presets.takeSnapshot();
 
    #if ONIRIQUE_UI_TEST
-    // essais locaux uniquement : ONIRIQUE_UI_TEST=demo,... charge un preset plus parlant pour le visuel de la boutique
+    // essais locaux uniquement : ONIRIQUE_UI_TEST=hook,... charge un preset plus parlant pour le visuel de la boutique
     if (juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {}).contains ("hook"))
         for (const auto& e : presets.list())
-            if (e.name == "Dream Hook") presets.load (e);
+            if (e.name == "Wide Atmospheric Vocal") presets.load (e);
    #endif
 }
 
@@ -41,30 +32,11 @@ OniriqueVocalMiniAudioProcessor::~OniriqueVocalMiniAudioProcessor()
 
 mini::MiniChain::Params OniriqueVocalMiniAudioProcessor::readParams() const noexcept
 {
-    mini::MiniChain::Params p;
-    p.inDb = raw.in->load();
-    p.outDb = raw.out->load();
-    p.autoInput = raw.autoIn->load() > 0.5f;
-    p.lowCut = raw.lowCut->load() > 0.5f;
-    p.low = raw.low->load() * 0.1f;
-    p.mid = raw.mid->load() * 0.1f;
-    p.hi = raw.hi->load() * 0.1f;
-    p.air = raw.air->load() * 0.1f;
-    p.comp = raw.comp->load() * 0.01f;
-    p.multi = raw.multi->load() * 0.01f;
-    p.deess = raw.deess->load() * 0.01f;
-    p.drive = raw.drive->load() * 0.01f;
-    p.phone = raw.phone->load() * 0.01f;
-    p.doubler = raw.doubler->load() * 0.01f;
-    p.chorus = raw.chorus->load() * 0.01f;
-    p.delay = raw.delay->load() * 0.01f;
-    p.feed = raw.feed->load() * 0.01f;
-    p.filter = raw.filter->load() * 0.01f;
-    p.division = juce::roundToInt (raw.time->load());
-    p.ping = raw.ping->load() > 0.5f;
-    for (int k = 0; k < 4; ++k) p.reverb[(size_t) k] = raw.rev[k]->load() * 0.01f;
-    p.bypass = raw.bypass->load() > 0.5f;
+    prm::Values v;
+    for (int i = 0; i < prm::count; ++i) v[(size_t) i] = raw[(size_t) i]->load (std::memory_order_relaxed);
+    auto p = prm::toChain (v);
     p.bpm = bpmNow.load (std::memory_order_relaxed);
+    p.ppq = ppqNow;
     return p;
 }
 
@@ -78,7 +50,7 @@ bool OniriqueVocalMiniAudioProcessor::isBusesLayoutSupported (const BusesLayout&
 
 void OniriqueVocalMiniAudioProcessor::configure()
 {
-    const bool live = juce::roundToInt (raw.mode->load()) == 0;
+    const bool live = juce::roundToInt (raw[prm::mode]->load()) == 0;
     chain.prepare (currentRate, readParams(), live);
     liveNow.store (live);
     setLatencySamples (chain.getLatencySamples());
@@ -86,7 +58,7 @@ void OniriqueVocalMiniAudioProcessor::configure()
 
 void OniriqueVocalMiniAudioProcessor::handleAsyncUpdate()
 {
-    const bool live = juce::roundToInt (raw.mode->load()) == 0;
+    const bool live = juce::roundToInt (raw[prm::mode]->load()) == 0;
     if (currentRate <= 0.0 || live == liveNow.load()) { if (currentRate <= 0.0) liveNow.store (live); return; }
     suspendProcessing (true);    // le thread audio attend la fin de la reconfiguration (allocation hors temps réel)
     configure();
@@ -108,7 +80,7 @@ void OniriqueVocalMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const int total = buffer.getNumSamples();
 
     // une piste mono dans un plugin stéréo : la voix est recopiée à droite (le doubler, le chorus, le ping-pong et
-    // les reverbs s'ouvrent en stéréo)
+    // la reverb s'ouvrent en stéréo)
     const int inCh = getTotalNumInputChannels(), outCh = getTotalNumOutputChannels();
     if (inCh == 1 && outCh > 1 && buffer.getNumChannels() > 1)
         buffer.copyFrom (1, 0, buffer, 0, 0, total);
@@ -118,11 +90,16 @@ void OniriqueVocalMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const int numCh = juce::jmin (buffer.getNumChannels(), 2);
     if (numCh < 1 || total < 1) return;
 
-    // tempo du DAW (DELAY au temps)
+    // tempo du DAW (DELAY au temps) et position de lecture (PULSE de la reverb calé sur la mesure)
+    ppqNow = -1.0;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
+        {
             if (auto b = pos->getBpm(); b.hasValue() && *b > 1.0)
                 bpmNow.store (*b, std::memory_order_relaxed);
+            if (pos->getIsPlaying())
+                if (auto q = pos->getPpqPosition(); q.hasValue()) ppqNow = *q;
+        }
 
     chain.setParams (readParams());
     float* ch[2] { buffer.getWritePointer (0), numCh > 1 ? buffer.getWritePointer (1) : nullptr };
@@ -147,6 +124,23 @@ void OniriqueVocalMiniAudioProcessor::setStateInformation (const void* data, int
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
         {
+            // un projet enregistré avant VOCAL MINI PRO : les quatre envois de reverb deviennent un seul espace
+            std::map<juce::String, float> values;
+            for (auto* e : xml->getChildWithTagNameIterator ("PARAM"))
+                values[e->getStringAttribute ("id")] = (float) e->getDoubleAttribute ("value");
+            if (values.count (ids::revMode) == 0)
+            {
+                prm::migrateLegacy (values);
+                for (auto* id : { "revShort", "revSmall", "revBig", "revLush" })
+                    if (auto* old = xml->getChildByAttribute ("id", id)) xml->removeChildElement (old, true);
+                for (auto* id : { ids::revMode, ids::revMix, ids::revDecay, ids::revPre })
+                    if (const auto it = values.find (id); it != values.end())
+                    {
+                        auto* e = xml->getChildByAttribute ("id", id);
+                        if (e == nullptr) { e = xml->createNewChildElement ("PARAM"); e->setAttribute ("id", id); }
+                        e->setAttribute ("value", (double) it->second);
+                    }
+            }
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             presets.takeSnapshot();   // l'état rechargé sert de référence pour l'indicateur "modifié"
         }

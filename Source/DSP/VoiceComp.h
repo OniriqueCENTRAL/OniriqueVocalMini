@@ -23,7 +23,15 @@ namespace onirique::mini
        voix reste devant au lieu de reculer.
     5) RATTRAPAGE FIXE : le gain de sortie dépend seulement du bouton, calibré sur des voix réelles au niveau BEST pour
        que monter le bouton NE MONTE PAS le niveau de la voix : on entend la voix se tenir et devenir dense, pas plus
-       forte. Rien ne s'ajuste tout seul dans le temps : aucun saut de volume après un silence.
+       forte (une comparaison honnête, jamais « meilleur parce que plus fort »). Rien ne s'ajuste tout seul dans le
+       temps : aucun saut de volume après un silence. AUTO GAIN coupé : plus aucun rattrapage, la voix comprimée sort
+       plus bas (la garde garde le même comportement, calculée comme si le rattrapage était là).
+    Pourquoi le niveleur AVANT les crêtes : le FET voit une voix déjà nivelée, son seuil tombe donc toujours au même
+    endroit par rapport à la voix (il n'attrape que les vraies pointes, que la phrase soit forte ou douce) ; placé avant,
+    il comprimerait beaucoup les phrases fortes et rien les douces. Le bouton pilote les deux étages ensemble (seuil du
+    niveleur, poussée dans le FET, plafond de la garde, présence, rattrapage) : de 0 à 30 % une tenue discrète, vers
+    50 % une voix dense et devant, au-delà une compression franche « moderne », toujours bornée par la garde.
+    Mesures : réduction du niveleur (LEVEL) et des crêtes (PEAK = FET + garde) séparées, pour l'interface.
     À 0 le module est contourné (fondu) : rien ne colore la voix.
 */
 class VoiceComp
@@ -35,6 +43,7 @@ public:
         fet.prepare (fs);
         opto.prepare (fs);
         amt.prepare (fs, 0.08, amt.target());
+        auto0.prepare (fs, 0.05, auto0.target());
         catchAtk = coefFor (0.0002, fs);
         catchRel = coefFor (0.060, fs);
         catchBrief = coefFor (0.020, fs);
@@ -47,13 +56,18 @@ public:
 
     void reset() noexcept { fet.reset(); opto.reset(); presence.reset(); catchGr = catchSlow = 0.0f; }
 
-    void set (float amount01, bool snap) noexcept
+    // amount01 : le bouton COMP ; autoGain : rattrapage automatique (AUTO GAIN)
+    void set (float amount01, bool autoGain, bool snap) noexcept
     {
         amt.set (juce::jlimit (0.0f, 1.0f, amount01), snap);
+        auto0.set (autoGain ? 1.0f : 0.0f, snap);
         if (snap) apply (amount01, true);
     }
 
+    // réduction totale, du niveleur (LEVEL) et des crêtes (PEAK = FET + garde), en dB
     float getReductionDb() const noexcept { return grMeter.load (std::memory_order_relaxed); }
+    float getLevelReductionDb() const noexcept { return levelMeter.load (std::memory_order_relaxed); }
+    float getPeakReductionDb() const noexcept { return peakMeter.load (std::memory_order_relaxed); }
 
     // rattrapage (dB) pour un réglage : calibré pour que le niveau des passages chantés ne bouge pas (voix au niveau BEST)
     static float makeupDb (float a) noexcept { return 13.0f * std::pow (a, 1.25f) + 1.6f * std::pow (a, 0.4f); }
@@ -61,10 +75,15 @@ public:
 
     void process (float* const* ch, int numCh, int n, float* const* scratch) noexcept
     {
-        if (amt.idle()) { if (! wasIdle) { reset(); wasIdle = true; } grMeter.store (0.0f, std::memory_order_relaxed); return; }
+        if (amt.idle())
+        {
+            if (! wasIdle) { reset(); wasIdle = true; }
+            for (auto* m : { &grMeter, &levelMeter, &peakMeter }) m->store (0.0f, std::memory_order_relaxed);
+            return;
+        }
         wasIdle = false;
 
-        float peakCatch = 0.0f;
+        float total = 0.0f, level = 0.0f, peaks = 0.0f;
         // réglages suivis par tranches de 32 échantillons (les étages lissent eux-mêmes leurs gains)
         for (int pos = 0; pos < n; pos += 32)
         {
@@ -80,10 +99,12 @@ public:
             for (int c = 0; c < numCh; ++c)
                 for (int i = 0; i < m; ++i) x[c][i] = presence.process (x[c][i], c);
 
+            float chunkCatch = 0.0f;
             for (int i = 0; i < m; ++i)
             {
                 const float w = amt.next();
                 const float mk = dbToGain (makeupDb (w));
+                const float au = auto0.next();
                 // garde : plafond à genou doux (3 dB), 8:1, attaque 0.2 ms, relâchement 60 ms
                 float pk = 0.0f;
                 for (int c = 0; c < numCh; ++c) pk = std::max (pk, std::abs (x[c][i] * mk));
@@ -95,13 +116,21 @@ public:
                 const float brief = catchGr > 0.3f ? juce::jlimit (0.0f, 1.0f, 2.0f * (catchGr - catchSlow) / catchGr) : 0.0f;
                 catchGr += (target > catchGr ? catchAtk : catchRel + brief * (catchBrief - catchRel)) * (target - catchGr);
                 catchSlow += catchSlowC * (catchGr - catchSlow);
-                peakCatch = std::max (peakCatch, catchGr);
-                const float g = mk * dbToGain (-catchGr);
+                chunkCatch = std::max (chunkCatch, catchGr);
+                // la garde est calculée sur la voix rattrapée ; AUTO GAIN coupé, seul le rattrapage disparaît de la sortie
+                const float g = (1.0f + au * (mk - 1.0f)) * dbToGain (-catchGr);
                 const float mix = std::min (1.0f, w * 20.0f);   // de 0 à 5 % : on entre en fondu dans le module
                 for (int c = 0; c < numCh; ++c) x[c][i] = d[c][i] + mix * (x[c][i] * g - d[c][i]);
             }
+            // réduction de cette tranche de 32 échantillons, étage par étage
+            const float lv = opto.getGainReductionDb(), pkr = fet.getGainReductionDb() + chunkCatch;
+            level = std::max (level, lv);
+            peaks = std::max (peaks, pkr);
+            total = std::max (total, lv + pkr);
         }
-        grMeter.store (fet.getGainReductionDb() + opto.getGainReductionDb() + peakCatch, std::memory_order_relaxed);
+        grMeter.store (total, std::memory_order_relaxed);
+        levelMeter.store (level, std::memory_order_relaxed);
+        peakMeter.store (peaks, std::memory_order_relaxed);
     }
 
 private:
@@ -119,10 +148,10 @@ private:
     FetCompressor fet;
     OptoCompressor opto;
     Biquad presence;
-    Smooth amt;
+    Smooth amt, auto0;
     float catchAtk = 0.0f, catchRel = 0.0f, catchBrief = 0.0f, catchSlowC = 0.0f, catchGr = 0.0f, catchSlow = 0.0f;
     float lastA = -1.0f;
     bool wasIdle = true;
-    std::atomic<float> grMeter { 0.0f };
+    std::atomic<float> grMeter { 0.0f }, levelMeter { 0.0f }, peakMeter { 0.0f };
 };
 } // namespace onirique::mini

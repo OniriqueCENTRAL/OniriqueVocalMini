@@ -18,7 +18,8 @@ namespace onirique::mini
 
     SHINE (HI, AIR) : après la compression, avec une garde de sifflantes (les aigus ajoutés reculent de moitié pendant
     un S, et seulement pendant le S).
-      HI +   : présence à 3.2 kHz + plateau à 5.5 kHz, ouverture progressive et sans dureté.
+      HI +   : présence à 3.2 kHz (+1.8 dB au plus : la zone 2.5-4 kHz, celle de la dureté et de la fatigue, n'est jamais
+               poussée de plus de ~4.5 dB, même HI et AIR à fond) + plateau à 6 kHz : ouverture progressive, sans dureté.
       HI -   : retire la dureté (3.6 kHz) et adoucit le haut (6.5 kHz).
       AIR +  : la clarté qui respire. Un plateau très large posé à 12 kHz et prolongé à 17.5 kHz, plus le GRAIN :
                une excitation harmonique douce, prise dans la voix entre 2.8 et 9 kHz, mise en forme par une saturation
@@ -37,6 +38,30 @@ inline float cascadeDb (const BiquadCoeffs (&c)[N], const bool (&on)[N], double 
     for (int i = 0; i < N; ++i) if (on[i]) r *= c[i].response (fs, hz);
     return (float) (20.0 * std::log10 (std::max (1.0e-9, std::abs (r))));
 }
+
+// un filtre de courbe : il se réveille sans ancien état, glisse vers ses nouveaux coefficients, et ne quitte la chaîne
+// qu'après avoir glissé jusqu'à 0 dB EXACT et laissé s'éteindre son état (~85 ms) : aucune marche dans le signal quand un
+// bouton revient à zéro (un filtre retiré à +0.04 dB laissait un minuscule saut dans l'onde).
+struct EqSlot
+{
+    static constexpr int kHold = 4096;
+    SmoothBiquad f;
+    bool on = false, wanted = false;
+    int hold = 0;
+
+    void reset() noexcept { f.reset(); on = wanted = false; hold = 0; }
+    // c : coefficients voulus (0 dB exact quand want est faux)
+    void update (const BiquadCoeffs& c, bool want) noexcept
+    {
+        wanted = want;
+        if (want && ! on) { f.reset(); f.setNow (c); on = true; }
+        else if (on) f.glideTo (c, 16);
+        if (want) hold = kHold;
+    }
+    void retire (int n) noexcept { if (on && ! wanted && (hold -= n) <= 0) on = false; }
+    void tick() noexcept { if (on) f.tick(); }
+    float process (float x, int c) noexcept { return on ? f.process (x, c) : x; }
+};
 
 class BodyEQ
 {
@@ -74,13 +99,15 @@ public:
             if (--countdown <= 0)
             {
                 if (std::abs (l - lastL) > 1.0e-5f || std::abs (m - lastM) > 1.0e-5f) update (l, m);
+                for (auto& f : flt) f.retire (16);
                 countdown = 16;
             }
+            for (auto& f : flt) f.tick();
             for (int c = 0; c < numCh; ++c)
             {
                 float s = ch[c][i];
                 if (lcm > 0.0f) s += lcm * (lcB.process (lcA.process (s, c), c) - s);
-                for (int k = 0; k < kF; ++k) if (on[k]) s = flt[k].process (s, c);
+                for (auto& f : flt) s = f.process (s, c);
                 ch[c][i] = s;
             }
         }
@@ -107,19 +134,14 @@ private:
         BiquadCoeffs c[kF];
         bool now[kF];
         design (fs, l, m, c, now);
-        for (int k = 0; k < kF; ++k)
-        {
-            if (now[k] && ! on[k]) flt[k].reset();   // filtre qui se réveille : pas d'ancien état
-            flt[k].setCoeffs (c[k]);
-            on[k] = now[k];
-        }
+        for (int k = 0; k < kF; ++k) flt[k].update (c[k], now[k]);
         lastL = l; lastM = m;
     }
 
     double fs = 48000.0;
     Smooth low, mid, lc;
-    Biquad flt[kF], lcA, lcB;
-    bool on[kF] {};
+    EqSlot flt[kF];
+    Biquad lcA, lcB;
     float lastL = 99.0f, lastM = 99.0f;
     int countdown = 0;
 };
@@ -176,8 +198,12 @@ public:
             if (--countdown <= 0)
             {
                 if (std::abs (h - lastH) > 1.0e-5f || std::abs (a - lastA) > 1.0e-5f) update (h, a);
+                for (auto& f : cut) f.retire (16);
+                for (auto& f : boost) f.retire (16);
                 countdown = 16;
             }
+            for (auto& f : cut) f.tick();
+            for (auto& f : boost) f.tick();
 
             // ---- garde : quand un S passe, ce que HI / AIR ajoutent recule (jusqu'à -50 %)
             float sb = 0.0f, fb = 0.0f;
@@ -199,9 +225,9 @@ public:
             {
                 const float x = ch[c][i];
                 float s = x;
-                for (int k = 0; k < kCut; ++k) if (cutOn[k]) s = cut[k].process (s, c);
+                for (auto& f : cut) s = f.process (s, c);
                 float b = s;
-                for (int k = 0; k < kBoost; ++k) if (boostOn[k]) b = boost[k].process (b, c);
+                for (auto& f : boost) b = f.process (b, c);
                 float y = s + dyn * (b - s);
 
                 // ---- GRAIN : la voix 2.8-9 kHz, ramenée à un niveau constant, saturée en douceur (harmoniques paires
@@ -233,8 +259,8 @@ public:
         c[2] = BiquadCoeffs::highShelf (fs, 9000.0, 0.5, -8.0 * an);
         cOn[0] = cOn[1] = hn > 1.0e-4f;
         cOn[2] = an > 1.0e-4f;
-        b[0] = BiquadCoeffs::peaking   (fs, 3200.0, 0.7, 3.0 * hp);
-        b[1] = BiquadCoeffs::highShelf (fs, 5500.0, 0.55, 6.5 * hp);
+        b[0] = BiquadCoeffs::peaking   (fs, 3200.0, 0.7, 1.8 * hp);
+        b[1] = BiquadCoeffs::highShelf (fs, 6000.0, 0.55, 6.5 * hp);
         b[2] = BiquadCoeffs::highShelf (fs, std::min (12000.0, 0.40 * fs), 0.42, 7.0 * ap);
         b[3] = BiquadCoeffs::highShelf (fs, std::min (17500.0, 0.42 * fs), 0.6, 3.0 * ap);
         bOn[0] = bOn[1] = hp > 1.0e-4f;
@@ -247,18 +273,8 @@ private:
         BiquadCoeffs c[kCut], b[kBoost];
         bool cNow[kCut], bNow[kBoost];
         design (fs, h, a, c, cNow, b, bNow);
-        for (int k = 0; k < kCut; ++k)
-        {
-            if (cNow[k] && ! cutOn[k]) cut[k].reset();
-            cut[k].setCoeffs (c[k]);
-            cutOn[k] = cNow[k];
-        }
-        for (int k = 0; k < kBoost; ++k)
-        {
-            if (bNow[k] && ! boostOn[k]) boost[k].reset();
-            boost[k].setCoeffs (b[k]);
-            boostOn[k] = bNow[k];
-        }
+        for (int k = 0; k < kCut; ++k) cut[k].update (c[k], cNow[k]);
+        for (int k = 0; k < kBoost; ++k) boost[k].update (b[k], bNow[k]);
         const float ap = taper (a, 1.1f);
         if (ap > 1.0e-4f && excAmt <= 0.0f)
         {
@@ -271,8 +287,7 @@ private:
 
     double fs = 48000.0;
     Smooth hi, air;
-    Biquad cut[kCut], boost[kBoost];
-    bool cutOn[kCut] {}, boostOn[kBoost] {};
+    EqSlot cut[kCut], boost[kBoost];
     Biquad sibBp, excInHp, excInLp, excHp1, excHp2, excLp;
     float sAtk = 0, sRel = 0, fAtk = 0, fRel = 0, envS = 0, envF = 0, guard = 0;
     float excAtk = 0, excRel = 0, excEnv[2] {}, excAmt = 0.0f;

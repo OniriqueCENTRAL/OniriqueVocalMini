@@ -47,6 +47,44 @@ private:
     int mask = 0, w = 0;
 };
 
+/*  Biquad pour les filtres qu'on règle en jouant (EQ, filtres de la reverb) : forme directe I (l'état est fait des
+    échantillons passés, il reste juste quels que soient les coefficients) et coefficients qui GLISSENT échantillon par
+    échantillon vers leur nouvelle valeur. Une forme transposée dont les coefficients sautent toutes les quelques
+    dizaines d'échantillons produit de petites cassures de pente (le « zipper » qu'on entend en tournant un bouton
+    d'EQ) ; ici la courbe se déforme continûment. tick() une fois par échantillon, puis process() pour chaque canal. */
+class SmoothBiquad
+{
+public:
+    void reset() noexcept { for (int c = 0; c < 2; ++c) x1[c] = x2[c] = y1[c] = y2[c] = 0.0; }
+    void setNow (const BiquadCoeffs& k) noexcept { cur = tgt = k; steps = 0; }
+    void glideTo (const BiquadCoeffs& k, int numSamples) noexcept
+    {
+        tgt = k;
+        steps = std::max (1, numSamples);
+        const double inv = 1.0 / steps;
+        inc.b0 = (k.b0 - cur.b0) * inv; inc.b1 = (k.b1 - cur.b1) * inv; inc.b2 = (k.b2 - cur.b2) * inv;
+        inc.a1 = (k.a1 - cur.a1) * inv; inc.a2 = (k.a2 - cur.a2) * inv;
+    }
+    void tick() noexcept
+    {
+        if (steps <= 0) return;
+        if (--steps == 0) { cur = tgt; return; }
+        cur.b0 += inc.b0; cur.b1 += inc.b1; cur.b2 += inc.b2; cur.a1 += inc.a1; cur.a2 += inc.a2;
+    }
+    float process (float xf, int c) noexcept
+    {
+        const double x = xf;
+        const double y = cur.b0 * x + cur.b1 * x1[c] + cur.b2 * x2[c] - cur.a1 * y1[c] - cur.a2 * y2[c];
+        x2[c] = x1[c]; x1[c] = x; y2[c] = y1[c]; y1[c] = y;
+        return (float) y;
+    }
+
+private:
+    BiquadCoeffs cur, tgt, inc;
+    int steps = 0;
+    double x1[2] {}, x2[2] {}, y1[2] {}, y2[2] {};
+};
+
 // passe-tout de Schroeder à retard entier (diffusion)
 class Allpass
 {
