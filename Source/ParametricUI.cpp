@@ -209,22 +209,11 @@ int EqDisplay::handleAt (juce::Point<float> p) const
 }
 
 //------------------------------------------------------------------------------
-// chaque point de l'écran couvre 1/6 d'octave : somme des bins de la bande (aigus), ou interpolation entre les deux
-// bins voisins quand la bande est plus étroite qu'un bin (graves) -> courbe lisse partout, sans escalier dans le bas
+// chaque point de l'écran : moyenne gaussienne de 1/12 d'octave des bins voisins (voir SpectrumSmoother.h)
 void EqDisplay::buildMap (double fs)
 {
     mapFs = fs;
-    const double binHz = fs / kN;
-    for (int i = 0; i < kPts; ++i)
-    {
-        const double f = hzAt (i), lo = f * std::pow (2.0, -1.0 / 12.0), hi = f * std::pow (2.0, 1.0 / 12.0);
-        auto& pm = pmap[(size_t) i];
-        pm.width = (float) ((hi - lo) / binHz);
-        pm.interp = pm.width < 2.0f;
-        pm.pos = (float) (f / binHz);
-        pm.b0 = juce::jlimit (1, kN / 2, (int) std::ceil (lo / binHz));
-        pm.b1 = juce::jlimit (pm.b0, kN / 2, (int) std::floor (hi / binHz));
-    }
+    smoother.build (fs, kN, kPts);
 }
 
 bool EqDisplay::analyse (onirique::SpectrumTap& tap, std::vector<float>& hist, int& writePos, std::array<float, kPts>& spec)
@@ -246,25 +235,14 @@ bool EqDisplay::analyse (onirique::SpectrumTap& tap, std::vector<float>& hist, i
         const float a = fftBuf[(size_t) k] * windowGain;
         fftBuf[(size_t) k] = a * a;                // puissance
     }
+    std::array<float, kPts> level;
+    smoother.apply (fftBuf.data(), level);
     for (int i = 0; i < kPts; ++i)
     {
-        const auto& pm = pmap[(size_t) i];
-        double e = 0.0;
-        if (pm.interp)
-        {
-            const int k0 = juce::jlimit (1, kN / 2 - 1, (int) std::floor (pm.pos));
-            const float t = juce::jlimit (0.0f, 1.0f, pm.pos - (float) k0);
-            e = ((1.0f - t) * fftBuf[(size_t) k0] + t * fftBuf[(size_t) k0 + 1]) * std::max (1.0f, pm.width / 1.5f);
-        }
-        else
-        {
-            for (int b = pm.b0; b <= pm.b1; ++b) e += fftBuf[(size_t) b];
-            e /= 1.5;                              // Hann : largeur de bande équivalente 1.5 bin
-        }
-        const float db = (float) (10.0 * std::log10 (e + 1.0e-14));
+        const float db = level[(size_t) i];
         auto& s = spec[(size_t) i];
         const float before = s;
-        s += (db > s ? 0.84f : 0.17f) * (db - s);  // montée vive, retombée douce (~180 ms), à 30 analyses par seconde
+        s += (db > s ? 0.70f : 0.13f) * (db - s);  // montée vive, retombée douce (~250 ms), à 30 analyses par seconde
         moved |= std::abs (s - before) > 0.05f && std::max (s, before) > -105.0f;
     }
     return moved;

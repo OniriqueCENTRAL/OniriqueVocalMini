@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MiniUI.h"
+#include "SpectrumSmoother.h"
 
 /*  L'écran PARAMETRIC de VOCAL MINI PRO (bouton PARAMETRIC de la rangée EQ) : un EQ paramétrique 8 bandes en grand.
 
@@ -54,7 +55,6 @@ public:
 
 private:
     static constexpr int kOrder = 13, kN = 1 << kOrder, kPts = 360, kKnobs = 4;
-    struct PointMap { int b0 = 1, b1 = 1; float pos = 1.0f, width = 1.0f; bool interp = true; };
 
     onirique::mini::VoiceParametric::Band band (int b) const;
     float value (const juce::String& id) const;
@@ -82,7 +82,7 @@ private:
     juce::AudioProcessorValueTreeState& st;
     juce::dsp::FFT fft { kOrder };
     std::vector<float> window, histIn, histOut, scratch, fftBuf;
-    std::array<PointMap, kPts> pmap {};
+    onirique::ui::SpectrumSmoother smoother;   // lissage gaussien des spectres, poids calculés une fois
     double mapFs = 0.0;
     int writeIn = 0, writeOut = 0, frame = 0;
     float windowGain = 1.0f;
