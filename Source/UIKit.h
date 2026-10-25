@@ -1,6 +1,6 @@
 #pragma once
 
-#include "PresetManager.h"
+#include "Parameters.h"
 
 #include <array>
 #include <map>
@@ -225,36 +225,6 @@ private:
     float glow = 0.0f, lit = 0.0f;
 };
 
-
-// Barre de presets (en-tête) : précédent / nom (menu) / suivant + SAVE (champ de nom intégré).
-class PresetBar : public juce::Component, public Animated
-{
-public:
-    explicit PresetBar (onirique::PresetManager&);
-
-    void paint (juce::Graphics&) override;
-    void resized() override;
-    void tick() override;
-    void mouseDown (const juce::MouseEvent&) override;
-    void mouseMove (const juce::MouseEvent&) override;
-    void mouseExit (const juce::MouseEvent&) override;
-
-private:
-    enum Zone { none = -1, prev, name, next, save };
-    Zone zoneAt (juce::Point<float>) const noexcept;
-    void showMenu();
-    void startSave();
-    void endSave (bool commit);
-
-    onirique::PresetManager& pm;
-    juce::TextEditor editor;
-    juce::Rectangle<float> zones[4];
-    juce::String shownName;
-    bool modified = false;
-    Zone hover = none;
-    float glow[4] {};
-    int frame = 0;
-};
 
 
 // Mètre de niveau vertical stéréo (L / R) : crête instantanée, retombée douce (~20 dB/s), maintien de crête 1.5 s,

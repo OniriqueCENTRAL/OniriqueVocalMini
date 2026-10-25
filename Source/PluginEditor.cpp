@@ -20,8 +20,8 @@ float rowTop (int r) { float y = kRowY; for (int i = 0; i < r; ++i) y += kRowH[i
 juce::String dbShort (float db) { return (db > 0.05f ? "-" : "") + juce::String (std::abs (db), 1) + " dB"; }
 } // namespace
 
-OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (OniriqueVocalMiniAudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+VocalMiniView::VocalMiniView (OniriqueVocalMiniAudioProcessor& p)
+    : processor (p)
 {
     tooltipWindow.setLookAndFeel (&lnf);
     setLookAndFeel (&lnf);   // menus et champs de texte dans le style du plugin
@@ -29,10 +29,8 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     logo = juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize);
 
     addAndMakeVisible (orb);
-    addAndMakeVisible (presetBar);
     addAndMakeVisible (modeSel);
-    for (auto* b : { &bypassBtn, &lowCut, &autoInput, &ping, &plosOn, &nsOn, &gateOn }) addAndMakeVisible (*b);
-    bypassBtn.setTooltip ("Bypass: hear the untouched voice to compare (click-free, aligned with the latency).");
+    for (auto* b : { &lowCut, &autoInput, &ping, &plosOn, &nsOn, &gateOn }) addAndMakeVisible (*b);
     lowCut.setTooltip ("Low cut at 90 Hz (18 dB/oct): removes rumble and handling noise.");
     autoInput.setTooltip ("AUTO INPUT: the input gain sets itself, like an engineer on a preamp, to keep the voice in the BEST "
                           "zone. Frozen in the silences: the noise between phrases never comes up.");
@@ -44,7 +42,7 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     gateOn.setTooltip ("NOISE GATE on / off: lowers the silences between phrases, never cuts word endings or soft breaths. "
                        "Placed before the compression and the effects: reverb and delay tails are never chopped.");
     const std::pair<const char*, juce::Button*> toggles[] { { ids::lowCut, &lowCut }, { ids::autoInput, &autoInput }, { ids::ping, &ping },
-                                                           { ids::bypass, &bypassBtn }, { ids::plosOn, &plosOn }, { ids::nsOn, &nsOn },
+                                                           { ids::plosOn, &plosOn }, { ids::nsOn, &nsOn },
                                                            { ids::gateOn, &gateOn } };
     for (const auto& [id, b] : toggles)
         buttonAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (st, id, *b));
@@ -110,34 +108,17 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     }
     for (auto* c : std::initializer_list<juce::Component*> { &time, &inBar, &outBar, &plosRead, &nsRead, &gateRead, &revMode, &revScope })
         addAndMakeVisible (*c);
-    for (auto* a : std::initializer_list<Animated*> { &orb, &presetBar, &modeSel, &bypassBtn, &lowCut, &autoInput, &ping, &plosOn,
+    for (auto* a : std::initializer_list<Animated*> { &orb, &modeSel, &lowCut, &autoInput, &ping, &plosOn,
                                                       &nsOn, &gateOn, &time, &inBar, &outBar, &plosRead, &nsRead, &gateRead,
                                                       &revMode, &revScope })
         animated.push_back (a);
     for (auto* pnl : panels) addChildComponent (*pnl);
 
-    // redimensionnable, proportions verrouillées. La taille mémorisée est lue AVANT tout appel qui redimensionne.
-    const int w = window::openingSize (processor.apvts.state, "ONIRIQUE VOCAL MINI",
-                                       { 1120, juce::roundToInt (1120.0f * kBaseH / kBaseW) },
-                                       { kMinW, juce::roundToInt ((float) kMinW * kBaseH / kBaseW) },
-                                       { kMaxW, juce::roundToInt ((float) kMaxW * kBaseH / kBaseW) }).x;
-    setResizable (true, true);
-    setResizeLimits (kMinW, juce::roundToInt (kMinW * kBaseH / kBaseW), kMaxW, juce::roundToInt (kMaxW * kBaseH / kBaseW));
-    if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) (kBaseW / kBaseH));
-    setSize (w, juce::roundToInt ((float) w * kBaseH / kBaseW));
-    restoringSize = false;
-    window::remember (processor.apvts.state, getWidth(), getHeight());
-
-    // Licence : pastille et page d'activation, par-dessus tout le reste.
-    licenseOverlay = std::make_unique<license::Overlay> ("ONIRIQUE VOCAL MINI", processor.license);
-    addAndMakeVisible (*licenseOverlay);
     lastPreset = processor.presets.getCurrentName();
-    resized();
 
    #if ONIRIQUE_UI_TEST
     // essais locaux uniquement (jamais dans les versions publiées) : captures et visuel de démo sans la page d'activation
     const auto test = juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {});
-    if (test.contains ("nolicense")) licenseOverlay->setVisible (false);
     if (test.contains ("static"))
     {
         orb.frozen = true; revScope.frozen = true; reverbPanel.scope.frozen = true; bandPanel.frozen = true; peqPanel.display.frozen = true;
@@ -174,15 +155,14 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     startTimerHz (60);
 }
 
-OniriqueVocalMiniAudioProcessorEditor::~OniriqueVocalMiniAudioProcessorEditor()
+VocalMiniView::~VocalMiniView()
 {
     stopTimer();
-    window::rememberOnThisComputer ("ONIRIQUE VOCAL MINI", getWidth(), getHeight());
     tooltipWindow.setLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
 }
 
-juce::Rectangle<int> OniriqueVocalMiniAudioProcessorEditor::panelArea (int which) const
+juce::Rectangle<int> VocalMiniView::panelArea (int which) const
 {
     const float u = scale();
     const float bottom = rowTop (4) + kRowH[4];
@@ -191,15 +171,14 @@ juce::Rectangle<int> OniriqueVocalMiniAudioProcessorEditor::panelArea (int which
     return juce::Rectangle<float> (kRowX * u, kRowY * u, kRowW * u, (bottom - kRowY) * u).toNearestInt();
 }
 
-void OniriqueVocalMiniAudioProcessorEditor::openPanel (int which)
+void VocalMiniView::openPanel (int which)
 {
     panelWanted = which;
     for (int i = 0; i < (int) panels.size(); ++i)
         if (i == which) { panels[(size_t) i]->setVisible (true); panels[(size_t) i]->toFront (false); }
-    if (licenseOverlay != nullptr) licenseOverlay->toFront (false);
 }
 
-void OniriqueVocalMiniAudioProcessorEditor::timerCallback()
+void VocalMiniView::timerCallback()
 {
     clock += 1.0 / 60.0;
     ++frame;
@@ -239,7 +218,7 @@ void OniriqueVocalMiniAudioProcessorEditor::timerCallback()
     }
 }
 
-void OniriqueVocalMiniAudioProcessorEditor::resized()
+void VocalMiniView::resized()
 {
     backdropLayer = {};
     const float u = scale();
@@ -248,13 +227,7 @@ void OniriqueVocalMiniAudioProcessorEditor::resized()
 
     // ---- en-tête
     logoRect = { 22.0f * u, 14.0f * u, 42.0f * u * 985.0f / 895.0f, 42.0f * u };
-    modeSel.setBounds (R (352, 19, 132, 32));
-    bypassBtn.setBounds (R (494, 20, 104, 30));
-    const float badgeW = licenseOverlay != nullptr ? (float) licenseOverlay->pillWidth() : 0.0f;
-    const float badgeRight = W / u - 18.0f;
-    if (licenseOverlay != nullptr)
-        licenseOverlay->fit (getLocalBounds(), u, juce::Rectangle<float> (badgeRight - badgeW, 19.0f, badgeW, 32.0f).toNearestInt());
-    presetBar.setBounds (juce::Rectangle<float> (300.0f * u, 34.0f * u).withRightX ((badgeRight - badgeW - 10.0f) * u).withY (18.0f * u).toNearestInt());
+    modeSel.setBounds (R (W / u - 18.0f - 132.0f, 19, 132, 32));   // à droite de l'en-tête
 
     // ---- COMP et MULTIBAND, à gauche
     orb.setBounds (R (14, 70, 392, 552));
@@ -332,12 +305,9 @@ void OniriqueVocalMiniAudioProcessorEditor::resized()
         k.createGaussianBlur ((float) lh / 22.0f);
         k.applyToImage (logoGlow, src, src.getBounds());
     }
-
-    if (! restoringSize)
-        window::remember (processor.apvts.state, getWidth(), getHeight());   // taille mémorisée avec le projet
 }
 
-void OniriqueVocalMiniAudioProcessorEditor::paint (juce::Graphics& g)
+void VocalMiniView::paint (juce::Graphics& g)
 {
     // fond : image prête, à la résolution réelle de l'écran (Retina : x2)
     const float ps = juce::jmax (1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
@@ -374,7 +344,7 @@ void OniriqueVocalMiniAudioProcessorEditor::paint (juce::Graphics& g)
     }
 }
 
-void OniriqueVocalMiniAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
+void VocalMiniView::paintOverChildren (juce::Graphics& g)
 {
     if (sweep <= 0.0f) return;
     // changement de preset : une bande de lumière rouge descend sur les rangées et s'efface
@@ -391,7 +361,7 @@ void OniriqueVocalMiniAudioProcessorEditor::paintOverChildren (juce::Graphics& g
 }
 
 // ---- le fond : noir profond, lueurs rouges très discrètes, cartes de verre des rangées, titres (dessiné une fois)
-void OniriqueVocalMiniAudioProcessorEditor::paintBackdrop (juce::Graphics& g)
+void VocalMiniView::paintBackdrop (juce::Graphics& g)
 {
     const float u = scale();
     const float W = (float) getWidth(), H = (float) getHeight();
@@ -500,4 +470,90 @@ void OniriqueVocalMiniAudioProcessorEditor::paintBackdrop (juce::Graphics& g)
     // pied : filet
     g.setColour (ui::line.withAlpha (0.08f));
     g.fillRect (14.0f * u, (rowTop (4) + kRowH[4] + 5.0f) * u, W - 28.0f * u, std::max (1.0f, u));
+}
+
+//==============================================================================
+namespace
+{
+constexpr int kBarH = 50;   // nuit::Bar::heightFor (1120)
+constexpr float kTotalH = kBaseH + (float) kBarH;
+
+juce::Image sigil() { return juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize); }
+} // namespace
+
+OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (OniriqueVocalMiniAudioProcessor& p)
+    : AudioProcessorEditor (&p), processor (p), view (p),
+      bar (p.presets, p.apvts, "VOCAL MINI", sigil(), (int) kBaseW, (int) kBaseW)
+{
+    jassert (nuit::Bar::heightFor ((int) kBaseW) == kBarH);
+    setOpaque (true);
+    addAndMakeVisible (view);
+    addAndMakeVisible (bar);
+
+    // Licence : pastille (dans la barre) et page d'activation, par-dessus tout le reste.
+    licenseOverlay = std::make_unique<license::Overlay> ("ONIRIQUE VOCAL MINI", processor.license);
+    addAndMakeVisible (*licenseOverlay);
+
+   #if ONIRIQUE_UI_TEST
+    // essais locaux uniquement : sans la page d'activation, le navigateur ou le menu ouverts, et une image de l'interface
+    // (ONIRIQUE_UI_PNG=fichier.png, rendue x2 par le moteur logiciel de JUCE)
+    const auto test = juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {});
+    if (test.contains ("nolicense")) licenseOverlay->setVisible (false);
+    if (const auto png = juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_PNG", {}); png.isNotEmpty())
+    {
+        juce::Component::SafePointer<OniriqueVocalMiniAudioProcessorEditor> safe (this);
+        juce::Timer::callAfterDelay (1500, [safe, png, test]
+        {
+            if (safe == nullptr) return;
+            if (test.contains ("browser")) safe->bar.openBrowser();
+            if (test.contains ("menu")) safe->bar.openMenu();
+            juce::Timer::callAfterDelay (400, [safe, png]
+            {
+                if (safe == nullptr) return;
+                juce::Image img (juce::Image::ARGB, safe->getWidth() * 2, safe->getHeight() * 2, true, juce::SoftwareImageType());
+                {
+                    juce::Graphics g2 (img);
+                    g2.addTransform (juce::AffineTransform::scale (2.0f));
+                    safe->paintEntireComponent (g2, true);
+                }
+                juce::File f (png);
+                f.deleteFile();
+                if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
+            });
+        });
+    }
+   #endif
+
+    // redimensionnable, proportions verrouillées (de 75 à 200 %). La taille mémorisée est lue AVANT tout appel qui redimensionne.
+    const int w = window::openingSize (processor.apvts.state, "ONIRIQUE VOCAL MINI",
+                                       { 1120, juce::roundToInt (1120.0f * kTotalH / kBaseW) },
+                                       { kMinW, juce::roundToInt ((float) kMinW * kTotalH / kBaseW) },
+                                       { kMaxW, juce::roundToInt ((float) kMaxW * kTotalH / kBaseW) }).x;
+    setResizable (true, true);
+    setResizeLimits (kMinW, juce::roundToInt (kMinW * kTotalH / kBaseW), kMaxW, juce::roundToInt (kMaxW * kTotalH / kBaseW));
+    if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) (kBaseW / kTotalH));
+    setSize (w, juce::roundToInt ((float) w * kTotalH / kBaseW));
+    restoringSize = false;
+    window::remember (processor.apvts.state, getWidth(), getHeight());
+    resized();
+}
+
+OniriqueVocalMiniAudioProcessorEditor::~OniriqueVocalMiniAudioProcessorEditor()
+{
+    window::rememberOnThisComputer ("ONIRIQUE VOCAL MINI", getWidth(), getHeight());
+}
+
+void OniriqueVocalMiniAudioProcessorEditor::resized()
+{
+    const float u = (float) getWidth() / kBaseW;
+    const int barPixels = juce::roundToInt ((float) kBarH * u);
+    view.setBounds (0, barPixels, getWidth(), juce::jmax (1, getHeight() - barPixels));
+
+    bar.setPillWidth (licenseOverlay != nullptr ? licenseOverlay->pillWidth() : 0);
+    bar.place (u, getLocalBounds());
+    if (licenseOverlay != nullptr)
+        licenseOverlay->fit (getLocalBounds(), u, bar.getPillArea(), juce::Justification::centredRight);
+
+    if (! restoringSize)
+        window::remember (processor.apvts.state, getWidth(), getHeight());   // taille mémorisée avec le projet
 }

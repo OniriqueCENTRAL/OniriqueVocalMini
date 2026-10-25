@@ -13,14 +13,13 @@ OniriqueVocalMiniAudioProcessor::OniriqueVocalMiniAudioProcessor()
     apvts.addParameterListener (ids::mode, this);
 
     // l'état de départ est le preset « Lead Clean Vocal » (les valeurs par défaut des paramètres)
-    apvts.state.setProperty ("presetName", "Lead Clean Vocal", nullptr);
-    presets.takeSnapshot();
+    apvts.state.setProperty ("preset", "Lead Clean Vocal", nullptr);
+    vocalmini::importOldUserPresets (presets);
 
    #if ONIRIQUE_UI_TEST
     // essais locaux uniquement : ONIRIQUE_UI_TEST=hook,... charge un preset plus parlant pour le visuel de la boutique
     if (juce::SystemStats::getEnvironmentVariable ("ONIRIQUE_UI_TEST", {}).contains ("hook"))
-        for (const auto& e : presets.list())
-            if (e.name == "Wide Atmospheric Vocal") presets.load (e);
+        presets.load ("Wide Atmosphere");
    #endif
 }
 
@@ -115,7 +114,9 @@ juce::AudioProcessorEditor* OniriqueVocalMiniAudioProcessor::createEditor()
 
 void OniriqueVocalMiniAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    presets.writeState (state);   // le côté A/B écouté, et l'autre
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
 
@@ -141,8 +142,12 @@ void OniriqueVocalMiniAudioProcessor::setStateInformation (const void* data, int
                         e->setAttribute ("value", (double) it->second);
                     }
             }
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
-            presets.takeSnapshot();   // l'état rechargé sert de référence pour l'indicateur "modifié"
+            auto state = juce::ValueTree::fromXml (*xml);
+            // un projet enregistré avec l'ancienne barre : le nom de son preset suit
+            if (! state.hasProperty ("preset") && state.hasProperty ("presetName"))
+                state.setProperty ("preset", state["presetName"], nullptr);
+            presets.readState (state);
+            apvts.replaceState (state);
         }
 }
 

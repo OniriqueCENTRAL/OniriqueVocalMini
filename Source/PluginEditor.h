@@ -2,15 +2,17 @@
 
 #include "License/LicenseOverlay.h"
 #include "ParametricUI.h"
+#include "ui/OniriqueBar.h"
 
-// ONIRIQUE VOCAL MINI PRO : en-tête (logo, nom, PRO SERIES, LIVE / MIX, BYPASS, presets, licence) ; à gauche le COMP et
+// ONIRIQUE VOCAL MINI PRO : sous la barre du haut (OniriqueBar.h : presets, IN, A/B, licence), l'en-tête (logo, nom,
+// PRO SERIES, LIVE / MIX) ; à gauche le COMP et
 // le MULTIBAND ; à droite cinq rangées (CLEAN, EQ, FX, DELAY, REVERB) ; IN et OUT en bas. Les panneaux BANDS et REVERB
 // s'ouvrent par-dessus les rangées, PARAMETRIC (l'EQ paramétrique) par-dessus le COMP et les rangées.
-class OniriqueVocalMiniAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
+class VocalMiniView : public juce::Component, private juce::Timer
 {
 public:
-    explicit OniriqueVocalMiniAudioProcessorEditor (OniriqueVocalMiniAudioProcessor&);
-    ~OniriqueVocalMiniAudioProcessorEditor() override;
+    explicit VocalMiniView (OniriqueVocalMiniAudioProcessor&);
+    ~VocalMiniView() override;
 
     void paint (juce::Graphics&) override;
     void paintOverChildren (juce::Graphics&) override;
@@ -30,12 +32,10 @@ private:
     juce::TooltipWindow tooltipWindow { this, 600 };
     juce::AudioProcessorValueTreeState& st = processor.apvts;
 
-    PresetBar presetBar { processor.presets };
     SegmentSelector modeSel { st, onirique::ids::mode, { "LIVE", "MIX" },
         { "LIVE: zero latency, to record while listening to yourself through VOCAL MINI PRO. Already the full sound.",
           "MIX: maximum quality once the recording is done (oversampled core, de-esser, de-plosive and gate that see what is "
           "coming, spectral noise suppressor). About 27 ms of latency, compensated by your DAW." } };
-    PillToggle bypassBtn { "BYPASS", PillToggle::Style::small };
     PillToggle lowCut { "LOW CUT", PillToggle::Style::small }, autoInput { "AUTO INPUT", PillToggle::Style::small },
                ping { "PING-PONG", PillToggle::Style::small };
     PanelButton peqButton { "PARAMETRIC" };
@@ -126,9 +126,26 @@ private:
     juce::String lastPreset;
     double clock = 0.0;
     int frame = 0;
-    bool restoringSize = true;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalMiniView)
+};
 
+// La fenêtre du plugin : la barre du haut des plugins ONIRIQUE (presets, IN, A/B, copier / coller, licence, taille de
+// la fenêtre), et l'interface dessous. Les deux se zooment ensemble, de 75 à 200 %.
+class OniriqueVocalMiniAudioProcessorEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit OniriqueVocalMiniAudioProcessorEditor (OniriqueVocalMiniAudioProcessor&);
+    ~OniriqueVocalMiniAudioProcessorEditor() override;
+
+    void paint (juce::Graphics&) override {}
+    void resized() override;
+
+private:
+    OniriqueVocalMiniAudioProcessor& processor;
+    VocalMiniView view;
+    onirique::nuit::Bar bar;
     std::unique_ptr<onirique::license::Overlay> licenseOverlay;
+    bool restoringSize = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OniriqueVocalMiniAudioProcessorEditor)
 };
