@@ -4,8 +4,7 @@
 #include "ParametricUI.h"
 #include "ui/OniriqueBar.h"
 
-// ONIRIQUE VOCAL MINI PRO : sous la barre du haut (OniriqueBar.h : presets, IN, A/B, licence), l'en-tête (logo, nom,
-// PRO SERIES, LIVE / MIX) ; à gauche le COMP et
+// ONIRIQUE VOCAL MINI PRO : sous la barre du haut (OniriqueBar.h : titre, presets, IN, A/B, licence), à gauche le COMP et
 // le MULTIBAND ; à droite cinq rangées (CLEAN, EQ, FX, DELAY, REVERB) ; IN et OUT en bas. Les panneaux BANDS et REVERB
 // s'ouvrent par-dessus les rangées, PARAMETRIC (l'EQ paramétrique) par-dessus le COMP et les rangées.
 class VocalMiniView : public juce::Component, private juce::Timer
@@ -118,9 +117,9 @@ private:
     int panelWanted = -1;
 
     std::vector<Animated*> animated;
-    juce::Image logo, logoScaled, logoGlow, backdropLayer;
+    juce::Image backdropLayer;
     float layersScale = 0.0f;
-    juce::Rectangle<float> logoRect, autoRect;
+    juce::Rectangle<float> autoRect;
     std::array<juce::Rectangle<float>, 5> rows;
     float autoShown = 99.0f, sweep = 0.0f;
     juce::String lastPreset;
@@ -131,7 +130,7 @@ private:
 
 // La fenêtre du plugin : la barre du haut des plugins ONIRIQUE (presets, IN, A/B, copier / coller, licence, taille de
 // la fenêtre), et l'interface dessous. Les deux se zooment ensemble, de 75 à 200 %.
-class OniriqueVocalMiniAudioProcessorEditor : public juce::AudioProcessorEditor
+class OniriqueVocalMiniAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
     explicit OniriqueVocalMiniAudioProcessorEditor (OniriqueVocalMiniAudioProcessor&);
@@ -141,9 +140,14 @@ public:
     void resized() override;
 
 private:
+    void timerCallback() override;
+    float titleWidth() const;
+    void paintTitle (juce::Graphics&, juce::Rectangle<float> area) const;   // le titre, dans la barre (en points)
+
     OniriqueVocalMiniAudioProcessor& processor;
     VocalMiniView view;
     onirique::nuit::Bar bar;
+    juce::Image logo, logoGlow;   // le logo du titre et sa lueur, qui respire
     std::unique_ptr<onirique::license::Overlay> licenseOverlay;
     bool restoringSize = true;
 

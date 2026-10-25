@@ -26,7 +26,6 @@ VocalMiniView::VocalMiniView (OniriqueVocalMiniAudioProcessor& p)
     tooltipWindow.setLookAndFeel (&lnf);
     setLookAndFeel (&lnf);   // menus et champs de texte dans le style du plugin
     setOpaque (true);
-    logo = juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize);
 
     addAndMakeVisible (orb);
     addAndMakeVisible (modeSel);
@@ -202,8 +201,7 @@ void VocalMiniView::timerCallback()
         if (pnl->isVisible()) dynamic_cast<Animated*> (pnl)->tick();
     }
 
-    // le logo respire (30 images/s suffisent), la correction d'AUTO INPUT s'affiche quand elle change
-    if ((frame & 1) == 0) repaint (logoRect.expanded (logoRect.getHeight() * 0.4f).getSmallestIntegerContainer());
+    // la correction d'AUTO INPUT s'affiche quand elle change
     const float a = processor.getChain().getAutoInputDb();
     if (std::abs (a - autoShown) > 0.05f) { autoShown = a; repaint (autoRect.getSmallestIntegerContainer().expanded (2)); }
 
@@ -224,10 +222,6 @@ void VocalMiniView::resized()
     const float u = scale();
     const float W = (float) getWidth();
     auto R = [u] (float x, float y, float w, float h) { return juce::Rectangle<float> (x * u, y * u, w * u, h * u).toNearestInt(); };
-
-    // ---- en-tête
-    logoRect = { 22.0f * u, 14.0f * u, 42.0f * u * 985.0f / 895.0f, 42.0f * u };
-    modeSel.setBounds (R (W / u - 18.0f - 132.0f, 19, 132, 32));   // à droite de l'en-tête
 
     // ---- COMP et MULTIBAND, à gauche
     orb.setBounds (R (14, 70, 392, 552));
@@ -282,7 +276,8 @@ void VocalMiniView::resized()
     inBar.setBounds (R (84, fy + 12.0f, 270, 32));
     autoInput.setBounds (R (368, fy + 16.0f, 118, 28));
     autoRect = juce::Rectangle<float> (496.0f * u, (fy + 16.0f) * u, 120.0f * u, 28.0f * u);
-    outBar.setBounds (R (744, fy + 12.0f, 290, 32));
+    modeSel.setBounds (R (624, fy + 14.0f, 132, 32));   // LIVE / MIX, à côté de l'entrée (la barre du haut tient le titre)
+    outBar.setBounds (R (766, fy + 12.0f, 268, 32));
     outK.setBounds (R (1046, fy, 52, 58));
 
     for (int i = 0; i < (int) panels.size(); ++i)
@@ -292,19 +287,6 @@ void VocalMiniView::resized()
             panels[(size_t) i]->setBounds (panelArea (i).translated (0, juce::roundToInt ((1.0f - ease) * 18.0f * u)));
         }
         else panels[(size_t) i]->setBounds (panelArea (i));
-
-    if (logo.isValid())
-    {
-        const int lh = juce::jlimit (16, 600, juce::roundToInt (logoRect.getHeight() * 2.0f));
-        logoScaled = logo.rescaled (juce::roundToInt ((float) lh * 985.0f / 895.0f), lh, juce::Graphics::highResamplingQuality);
-        const int pad = lh / 4;
-        juce::Image src (juce::Image::ARGB, logoScaled.getWidth() + 2 * pad, logoScaled.getHeight() + 2 * pad, true, juce::SoftwareImageType());
-        { juce::Graphics lg (src); lg.drawImageAt (logoScaled, pad, pad); }
-        logoGlow = juce::Image (juce::Image::ARGB, src.getWidth(), src.getHeight(), true, juce::SoftwareImageType());
-        juce::ImageConvolutionKernel k (15);
-        k.createGaussianBlur ((float) lh / 22.0f);
-        k.applyToImage (logoGlow, src, src.getBounds());
-    }
 }
 
 void VocalMiniView::paint (juce::Graphics& g)
@@ -321,17 +303,6 @@ void VocalMiniView::paint (juce::Graphics& g)
         paintBackdrop (bg);
     }
     g.drawImageTransformed (backdropLayer, juce::AffineTransform::scale (1.0f / layersScale));
-
-    // logo qui respire
-    if (logoScaled.isValid())
-    {
-        const float breathe = 0.5f + 0.5f * std::sin ((float) clock * 1.25f);
-        const float pad = logoRect.getHeight() * 0.25f;
-        g.setOpacity (0.30f + 0.40f * breathe);
-        g.drawImage (logoGlow, logoRect.expanded (pad));
-        g.setOpacity (1.0f);
-        g.drawImage (logoScaled, logoRect);
-    }
 
     // correction d'AUTO INPUT, à côté de l'interrupteur
     if (std::abs (autoShown) > 0.05f && autoShown < 90.0f)
@@ -381,38 +352,6 @@ void VocalMiniView::paintBackdrop (juce::Graphics& g)
         const float x = rnd.nextFloat() * W, y = rnd.nextFloat() * H, s = (0.5f + 1.2f * rnd.nextFloat() * rnd.nextFloat()) * u;
         g.setColour (ui::mist.withAlpha (0.03f + 0.07f * rnd.nextFloat()));
         g.fillEllipse (x, y, s, s);
-    }
-
-    // en-tête : VOCAL MINI, la pastille PRO SERIES, ONIRIQUE, et un filet
-    {
-        const float x = logoRect.getRight() + 12.0f * u;
-        const auto f1 = ui::font (ui::Face::display, 24.0f * u, true, 0.04f);
-        g.setFont (f1);
-        g.setColour (ui::mist);
-        g.drawText ("VOCAL", juce::Rectangle<float> (x, 13.0f * u, 160.0f * u, 28.0f * u), juce::Justification::centredLeft, false);
-        const float w1 = ui::textWidth (f1, "VOCAL ");
-        g.setColour (ui::ember);
-        g.drawText ("MINI", juce::Rectangle<float> (x + w1, 13.0f * u, 120.0f * u, 28.0f * u), juce::Justification::centredLeft, false);
-        const float w2 = ui::textWidth (f1, "MINI");
-        // PRO SERIES : petite pastille à côté du nom
-        const auto pf = ui::font (ui::Face::mono, 8.5f * u, true, 0.26f);
-        const float pw = ui::textWidth (pf, "PRO SERIES") + 14.0f * u;
-        const auto pill = juce::Rectangle<float> (x + w1 + w2 + 10.0f * u, 18.0f * u, pw, 17.0f * u);
-        g.setColour (ui::ember.withAlpha (0.14f));
-        g.fillRoundedRectangle (pill, pill.getHeight() * 0.5f);
-        g.setColour (ui::ember.withAlpha (0.75f));
-        g.drawRoundedRectangle (pill.reduced (0.5f), pill.getHeight() * 0.5f, std::max (1.0f, 0.9f * u));
-        g.setColour (ui::lilac);
-        g.setFont (pf);
-        g.drawText ("PRO SERIES", pill.translated (1.5f * u, 0.0f), juce::Justification::centred, false);
-        g.setColour (ui::haze);
-        g.setFont (ui::font (ui::Face::mono, 9.0f * u, false, 0.34f));
-        g.drawText ("ONIRIQUE", juce::Rectangle<float> (x + 1.0f * u, 42.0f * u, 160.0f * u, 12.0f * u), juce::Justification::centredLeft, false);
-        juce::ColourGradient line (ui::ember.withAlpha (0.0f), 0.0f, 0.0f, ui::ember.withAlpha (0.0f), W, 0.0f, false);
-        line.addColour (0.30, ui::ember.withAlpha (0.40f));
-        line.addColour (0.70, ui::line.withAlpha (0.20f));
-        g.setGradientFill (line);
-        g.fillRect (0.0f, 64.0f * u, W, std::max (1.0f, 1.0f * u));
     }
 
     // colonne de gauche : un verre très léger derrière le COMP
@@ -475,8 +414,9 @@ void VocalMiniView::paintBackdrop (juce::Graphics& g)
 //==============================================================================
 namespace
 {
-constexpr int kBarH = 50;   // nuit::Bar::heightFor (1120)
-constexpr float kTotalH = kBaseH + (float) kBarH;
+constexpr int kBarH = 50;          // nuit::Bar::heightFor (1120)
+constexpr float kHeaderH = 58.0f;  // le haut de l'interface, vide depuis que la barre tient le titre : il passe sous la barre
+constexpr float kTotalH = kBaseH - kHeaderH + (float) kBarH;
 
 juce::Image sigil() { return juce::ImageCache::getFromMemory (BinaryData::logo_png, BinaryData::logo_pngSize); }
 } // namespace
@@ -489,6 +429,22 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     setOpaque (true);
     addAndMakeVisible (view);
     addAndMakeVisible (bar);
+
+    // le titre de VOCAL MINI tient la place de la marque de la barre : il n'est écrit qu'une fois
+    logo = sigil();
+    if (logo.isValid())
+    {
+        // à la résolution d'un zoom de 200 % sur un écran Retina, une fois pour toutes
+        const int lh = 144, pad = lh / 4;
+        logo = logo.rescaled (juce::roundToInt ((float) lh * 985.0f / 895.0f), lh, juce::Graphics::highResamplingQuality);
+        juce::Image src (juce::Image::ARGB, logo.getWidth() + 2 * pad, logo.getHeight() + 2 * pad, true, juce::SoftwareImageType());
+        { juce::Graphics lg (src); lg.drawImageAt (logo, pad, pad); }
+        logoGlow = juce::Image (juce::Image::ARGB, src.getWidth(), src.getHeight(), true, juce::SoftwareImageType());
+        juce::ImageConvolutionKernel k (15);
+        k.createGaussianBlur ((float) lh / 22.0f);
+        k.applyToImage (logoGlow, src, src.getBounds());
+    }
+    bar.setBrand (juce::roundToInt (titleWidth()), [this] (juce::Graphics& g, juce::Rectangle<float> area) { paintTitle (g, area); });
 
     // Licence : pastille (dans la barre) et page d'activation, par-dessus tout le reste.
     licenseOverlay = std::make_unique<license::Overlay> ("ONIRIQUE VOCAL MINI", processor.license);
@@ -536,18 +492,19 @@ OniriqueVocalMiniAudioProcessorEditor::OniriqueVocalMiniAudioProcessorEditor (On
     restoringSize = false;
     window::remember (processor.apvts.state, getWidth(), getHeight());
     resized();
+    startTimerHz (30);   // le logo respire
 }
 
 OniriqueVocalMiniAudioProcessorEditor::~OniriqueVocalMiniAudioProcessorEditor()
 {
+    stopTimer();
     window::rememberOnThisComputer ("ONIRIQUE VOCAL MINI", getWidth(), getHeight());
 }
 
 void OniriqueVocalMiniAudioProcessorEditor::resized()
 {
     const float u = (float) getWidth() / kBaseW;
-    const int barPixels = juce::roundToInt ((float) kBarH * u);
-    view.setBounds (0, barPixels, getWidth(), juce::jmax (1, getHeight() - barPixels));
+    view.setBounds (0, juce::roundToInt (((float) kBarH - kHeaderH) * u), getWidth(), juce::roundToInt (kBaseH * u));
 
     bar.setPillWidth (licenseOverlay != nullptr ? licenseOverlay->pillWidth() : 0);
     bar.place (u, getLocalBounds());
@@ -556,4 +513,70 @@ void OniriqueVocalMiniAudioProcessorEditor::resized()
 
     if (! restoringSize)
         window::remember (processor.apvts.state, getWidth(), getHeight());   // taille mémorisée avec le projet
+}
+
+// Le titre tel qu'il était en tête de l'interface (logo qui respire, VOCAL MINI, la pastille PRO SERIES, ONIRIQUE),
+// à 85 % pour tenir dans la barre : x et y sont ceux de l'ancien en-tête, ramenés dans la zone de la marque.
+namespace
+{
+constexpr float kTitleScale = 0.85f, kOldCentreY = 34.5f, kOldLogoX = 22.0f;
+const float kOldLogoW = 42.0f * 985.0f / 895.0f;
+}
+
+float OniriqueVocalMiniAudioProcessorEditor::titleWidth() const
+{
+    const float k = kTitleScale;
+    const auto f1 = ui::font (ui::Face::display, 24.0f * k, true, 0.04f);
+    const auto pf = ui::font (ui::Face::mono, 8.5f * k, true, 0.26f);
+    return (kOldLogoW + 12.0f) * k + ui::textWidth (f1, "VOCAL ") + ui::textWidth (f1, "MINI") + 10.0f * k
+           + ui::textWidth (pf, "PRO SERIES") + 14.0f * k + 4.0f;
+}
+
+void OniriqueVocalMiniAudioProcessorEditor::paintTitle (juce::Graphics& g, juce::Rectangle<float> area) const
+{
+    const float k = kTitleScale;
+    const float barCentreY = (float) kBarH * 0.5f;
+    auto X = [&] (float oldX) { return area.getX() + (oldX - kOldLogoX) * k; };
+    auto Y = [&] (float oldY) { return barCentreY + (oldY - kOldCentreY) * k; };
+
+    // le logo qui respire
+    const auto logoRect = juce::Rectangle<float> (X (kOldLogoX), Y (14.0f), kOldLogoW * k, 42.0f * k);
+    if (logo.isValid())
+    {
+        const float breathe = 0.5f + 0.5f * std::sin ((float) (juce::Time::getMillisecondCounterHiRes() * 0.001) * 1.25f);
+        g.setOpacity (0.30f + 0.40f * breathe);
+        g.drawImage (logoGlow, logoRect.expanded (logoRect.getHeight() * 0.25f));
+        g.setOpacity (1.0f);
+        g.drawImage (logo, logoRect);
+    }
+
+    // VOCAL MINI, la pastille PRO SERIES, ONIRIQUE
+    const float x = logoRect.getRight() + 12.0f * k;
+    const auto f1 = ui::font (ui::Face::display, 24.0f * k, true, 0.04f);
+    g.setFont (f1);
+    g.setColour (ui::mist);
+    g.drawText ("VOCAL", juce::Rectangle<float> (x, Y (13.0f), 160.0f * k, 28.0f * k), juce::Justification::centredLeft, false);
+    const float w1 = ui::textWidth (f1, "VOCAL ");
+    g.setColour (ui::ember);
+    g.drawText ("MINI", juce::Rectangle<float> (x + w1, Y (13.0f), 120.0f * k, 28.0f * k), juce::Justification::centredLeft, false);
+    const float w2 = ui::textWidth (f1, "MINI");
+    const auto pf = ui::font (ui::Face::mono, 8.5f * k, true, 0.26f);
+    const float pw = ui::textWidth (pf, "PRO SERIES") + 14.0f * k;
+    const auto pill = juce::Rectangle<float> (x + w1 + w2 + 10.0f * k, Y (18.0f), pw, 17.0f * k);
+    g.setColour (ui::ember.withAlpha (0.14f));
+    g.fillRoundedRectangle (pill, pill.getHeight() * 0.5f);
+    g.setColour (ui::ember.withAlpha (0.75f));
+    g.drawRoundedRectangle (pill.reduced (0.5f), pill.getHeight() * 0.5f, 0.9f);
+    g.setColour (ui::lilac);
+    g.setFont (pf);
+    g.drawText ("PRO SERIES", pill.translated (1.5f * k, 0.0f), juce::Justification::centred, false);
+    g.setColour (ui::haze);
+    g.setFont (ui::font (ui::Face::mono, 9.0f * k, false, 0.34f));
+    g.drawText ("ONIRIQUE", juce::Rectangle<float> (x + 1.0f * k, Y (42.0f), 160.0f * k, 12.0f * k), juce::Justification::centredLeft, false);
+}
+
+void OniriqueVocalMiniAudioProcessorEditor::timerCallback()
+{
+    // le logo respire : seule la zone du titre se redessine
+    bar.repaint (bar.getBrandArea().withY (0).withHeight (kBarH).expanded (8, 0));
 }

@@ -20,6 +20,7 @@
 //      constructeur : addAndMakeVisible (bar), avant la pastille de licence ;
 //      resized()    : bar.setPillWidth (licenseOverlay->pillWidth()); bar.place (scale, getLocalBounds());
 //                     licenseOverlay->fit (getLocalBounds(), scale, bar.getPillArea(), Justification::centredRight);
+//      bar.setBrand (largeur, dessin) : le titre du plugin (son logo, son nom) à la place de « ONIRIQUE » + nom.
 //==============================================================================
 namespace onirique::nuit
 {
@@ -1214,6 +1215,18 @@ public:
     /** Où va la pastille de licence, en points. */
     Rectangle<int> getPillArea() const   { return pillArea; }
 
+    /** Le titre du plugin à la place de la marque « ONIRIQUE » + nom : sa largeur en points, et ce qui le dessine
+        (en points, dans la zone de la marque ; il peut déborder en hauteur sur toute la barre). */
+    void setBrand (int widthInPoints, std::function<void (Graphics&, Rectangle<float>)> painter)
+    {
+        customBrandWidth = widthInPoints;
+        brandPainter = std::move (painter);
+        resized();
+    }
+
+    /** La zone de la marque, en points (pour la redessiner seule quand elle s'anime). */
+    Rectangle<int> getBrandArea() const   { return brandArea; }
+
     /** Dans resized() du plugin : la barre en haut à ce zoom, la feuille de ses panneaux sur toute la fenêtre. */
     void place (float scale, Rectangle<int> editorBounds)
     {
@@ -1401,6 +1414,9 @@ private:
 
     int brandWidth() const
     {
+        if (brandPainter)
+            return customBrandWidth;
+
         const auto size = compact ? 12.0f : 13.0f;
         return roundToInt ((compact ? 26.0f : 30.0f) + 9.0f + GlyphArrangement::getStringWidth (fonts->displayFont (size, 0.06f), "ONIRIQUE")
                            + 9.0f + GlyphArrangement::getStringWidth (fonts->bodyFont (size, 0.22f), product) + (compact ? 0.0f : 30.0f));
@@ -1408,6 +1424,12 @@ private:
 
     void paintBrand (Graphics& g)
     {
+        if (brandPainter)
+        {
+            brandPainter (g, brandArea.toFloat());
+            return;
+        }
+
         auto r = brandArea.toFloat();
         const auto size = compact ? 12.0f : 13.0f;
         const auto mark = compact ? 26.0f : 30.0f;
@@ -1484,7 +1506,8 @@ private:
     Menu menu;
 
     Rectangle<int> brandArea, navWell, inWell, slotWell, clipWell, pillArea;
-    int pillWidth = 0, ticks = 0;
+    int pillWidth = 0, ticks = 0, customBrandWidth = 0;
+    std::function<void (Graphics&, Rectangle<float>)> brandPainter;
     String shownName;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Bar)
