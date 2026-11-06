@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "OniriqueDA.h"
 #include "OniriqueWindowSize.h"
 #include <BinaryData.h>
 
@@ -336,23 +337,8 @@ void VocalMiniView::paintBackdrop (juce::Graphics& g)
 {
     const float u = scale();
     const float W = (float) getWidth(), H = (float) getHeight();
-    g.fillAll (ui::night);
-    {
-        juce::ColourGradient grad (ui::blood.withAlpha (0.55f), 210.0f * u, 300.0f * u, ui::night.withAlpha (0.0f), 210.0f * u + W * 0.55f, 300.0f * u, true);
-        g.setGradientFill (grad);
-        g.fillRect (0.0f, 0.0f, W, H);
-        juce::ColourGradient grad2 (ui::blood.withAlpha (0.22f), W * 0.92f, H * 1.05f, ui::night.withAlpha (0.0f), W * 0.92f - W * 0.45f, H * 1.05f, true);
-        g.setGradientFill (grad2);
-        g.fillRect (0.0f, 0.0f, W, H);
-    }
-    // grain très fin
-    juce::Random rnd (21);
-    for (int i = 0; i < 90; ++i)
-    {
-        const float x = rnd.nextFloat() * W, y = rnd.nextFloat() * H, s = (0.5f + 1.2f * rnd.nextFloat() * rnd.nextFloat()) * u;
-        g.setColour (ui::mist.withAlpha (0.03f + 0.07f * rnd.nextFloat()));
-        g.fillEllipse (x, y, s, s);
-    }
+    // la DA ONIRIQUE (celle de VOCALBOX) : nuit et taches de la couleur de l'interface, floues
+    g.drawImageAt (onirique::da::backdrop (getWidth(), getHeight(), u), 0, 0);
 
     // colonne de gauche : un verre très léger derrière le COMP
     {
@@ -577,6 +563,13 @@ void OniriqueVocalMiniAudioProcessorEditor::paintTitle (juce::Graphics& g, juce:
 
 void OniriqueVocalMiniAudioProcessorEditor::timerCallback()
 {
+    // la couleur de l'interface (menu ⋯, ou changée dans un autre plugin ONIRIQUE) : caches vidés, tout se redessine
+    if (onirique::look::changedSince (themeSeen))
+    {
+        view.themeChanged();
+        std::function<void (juce::Component&)> all = [&all] (juce::Component& k) { k.repaint(); for (auto* ch : k.getChildren()) all (*ch); };
+        all (*this);
+    }
     // le logo respire : seule la zone du titre se redessine
     bar.repaint (bar.getBrandArea().withY (0).withHeight (kBarH).expanded (8, 0));
 }

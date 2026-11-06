@@ -632,7 +632,7 @@ void PowerButton::paintButton (juce::Graphics& g, bool highlighted, bool)
     g.fillEllipse (disk);
     g.setColour (ui::ember.withAlpha (0.16f * on));
     g.fillEllipse (disk);
-    g.setColour (ui::line.interpolatedWith (ui::ember, on).withMultipliedAlpha (highlighted ? 1.0f : 0.9f));
+    g.setColour (ui::line.interpolatedWith (onirique::look::emberLit.withAlpha (0.5f), on).withMultipliedAlpha (highlighted ? 1.0f : 0.9f));
     g.drawEllipse (disk, std::max (1.0f, 1.4f * u));
 
     // pictogramme power : arc ouvert en haut + barre verticale, extrémités arrondies
@@ -668,7 +668,9 @@ void PillToggle::paintButton (juce::Graphics& g, bool highlighted, bool)
     juce::Path shape;
     shape.addRoundedRectangle (r, radius);
     ui::strokeGlow (g, shape, ui::ember, 1.5f * u, on * 0.8f, 2.0f * inset);   // le halo s'éteint dans la marge
-    g.setColour (juce::Colours::black.withAlpha (highlighted ? 0.28f : 0.36f));
+    g.setColour (juce::Colours::black.withAlpha (highlighted ? 0.38f : 0.45f));
+    g.fillPath (shape);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.06f), 0.0f, r.getY(), juce::Colours::white.withAlpha (0.015f), 0.0f, r.getBottom(), false));
     g.fillPath (shape);
     if (ripple > 0.0f)
     {
@@ -683,11 +685,10 @@ void PillToggle::paintButton (juce::Graphics& g, bool highlighted, bool)
     }
     if (on > 0.001f)
     {
-        g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.30f * on), r.getX(), r.getY(),
-                                                 ui::blood.withAlpha (0.25f * on), r.getRight(), r.getBottom(), false));
+        g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.6f * on), 0.0f, r.getY(), onirique::look::emberDeep.withAlpha (0.6f * on), 0.0f, r.getBottom(), false));
         g.fillPath (shape);
     }
-    g.setColour (ui::line.interpolatedWith (ui::ember, on));
+    g.setColour (ui::line.interpolatedWith (onirique::look::emberLit.withAlpha (0.5f), on));
     g.strokePath (shape, juce::PathStrokeType (std::max (1.0f, 1.4f * u)));
 
     if (big)
@@ -719,8 +720,8 @@ void PillToggle::paintButton (juce::Graphics& g, bool highlighted, bool)
         g.fillEllipse (ledR);
 
         const auto textR = r.withTrimmedLeft (pad * 2.0f + d).withTrimmedRight (pad * 0.8f);
-        g.setColour (ui::haze.interpolatedWith (ui::bone, juce::jmax (on, highlighted ? 0.6f : 0.0f)));
-        g.setFont (ui::fitFont (ui::Face::body, r.getHeight() * (style == Style::mini ? 0.52f : 0.40f), textR.getWidth(), getButtonText(), true, 0.10f));
+        g.setColour (ui::haze.interpolatedWith (juce::Colours::white, juce::jmax (on, highlighted ? 0.6f : 0.0f)));
+        g.setFont (ui::fitFont (ui::Face::mono, r.getHeight() * (style == Style::mini ? 0.46f : 0.34f), textR.getWidth(), getButtonText(), false, 0.14f));
         g.drawText (getButtonText(), textR, juce::Justification::centred, false);
     }
 }
@@ -743,7 +744,9 @@ void IconButton::paintButton (juce::Graphics& g, bool, bool)
     juce::Path shape;
     shape.addRoundedRectangle (b, h * 0.5f);
     ui::strokeGlow (g, shape, ui::ember, 1.2f * u, 0.6f * glow);
-    g.setColour (juce::Colours::black.withAlpha (0.38f));
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.fillPath (shape);
+    g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.06f), 0.0f, b.getY(), juce::Colours::white.withAlpha (0.015f), 0.0f, b.getBottom(), false));
     g.fillPath (shape);
     g.setColour (ui::ember.withAlpha (0.14f * glow));
     g.fillPath (shape);
@@ -751,32 +754,32 @@ void IconButton::paintButton (juce::Graphics& g, bool, bool)
     {
         // allumé (écoute) : pastille braise qui respire doucement
         const float breathe = 0.85f + 0.15f * std::sin ((float) juce::Time::getMillisecondCounter() * 0.004f);
-        g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.75f * lit * breathe), b.getX(), b.getY(),
-                                                 ui::blood.withAlpha (0.8f * lit), b.getRight(), b.getBottom(), false));
+        g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.65f * lit * breathe), 0.0f, b.getY(), onirique::look::emberDeep.withAlpha (0.7f * lit), 0.0f, b.getBottom(), false));
         g.fillPath (shape);
     }
-    g.setColour (ui::line.interpolatedWith (ui::ember, juce::jmax (lit, 0.25f + 0.75f * glow)));
+    g.setColour (ui::line.interpolatedWith (onirique::look::emberLit.withAlpha (0.55f), juce::jmax (lit, 0.25f + 0.75f * glow)));
     g.strokePath (shape, juce::PathStrokeType (std::max (1.0f, 1.2f * u)));
 
     const float s = h * 0.42f;
     const float cx = text.isEmpty() ? b.getCentreX() : b.getX() + h * 0.62f, cy = b.getCentreY();
     if (icon == Icon::headphones)
     {
-        // casque : arceau + deux écouteurs arrondis
-        juce::Path hp;
-        const float r = s * 0.62f;
-        hp.addCentredArc (cx, cy + r * 0.15f, r, r, 0.0f, -kPi * 0.62f, kPi * 0.62f, true);
-        g.setColour (ui::haze.interpolatedWith (ui::bone, juce::jmax (0.45f, juce::jmax (glow, lit))));
-        g.strokePath (hp, juce::PathStrokeType (std::max (1.3f, 1.8f * u), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        for (float sx : { -1.0f, 1.0f })
+        // casque : le pictogramme de VOCALBOX (arceau ouvert, écouteurs posés sous l'arceau)
         {
-            const auto cup = juce::Rectangle<float> (r * 0.5f, r * 0.82f).withCentre ({ cx + sx * r * 0.86f, cy + r * 0.62f });
-            g.fillRoundedRectangle (cup, r * 0.2f);
+            const auto ctr = juce::Point<float> (cx, cy);
+            const float rad = s * 0.55f;
+            juce::Path hp;
+            hp.addCentredArc (ctr.x, ctr.y + rad * 0.15f, rad, rad, 0.0f, -1.75f, 1.75f, true);
+            g.setColour (ui::haze.interpolatedWith (ui::bone, juce::jmax (0.45f, juce::jmax (glow, lit))));
+            g.strokePath (hp, juce::PathStrokeType (std::max (1.3f, 1.8f * u), juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            const float cw = rad * 0.42f, ch = rad * 0.75f;
+            g.fillRoundedRectangle (ctr.x - rad - cw * 0.35f, ctr.y + rad * 0.05f, cw, ch, cw * 0.3f);
+            g.fillRoundedRectangle (ctr.x + rad - cw * 0.65f, ctr.y + rad * 0.05f, cw, ch, cw * 0.3f);
         }
         if (text.isNotEmpty())
         {
             const auto tr = b.withTrimmedLeft (h * 1.15f).withTrimmedRight (h * 0.45f);
-            g.setFont (ui::fitFont (ui::Face::body, h * 0.44f, tr.getWidth(), text, true, 0.10f));
+            g.setFont (ui::fitFont (ui::Face::mono, h * 0.38f, tr.getWidth(), text, false, 0.14f));
             g.drawText (text, tr, juce::Justification::centred, false);
         }
         return;
@@ -870,7 +873,7 @@ void LevelMeter::paint (juce::Graphics& g)
         const float top = yOf (levelDb[c]);
         if (top < bar.getBottom() - 0.5f)
         {
-            juce::ColourGradient cg (ui::bone.withAlpha (0.30f), 0.0f, bar.getBottom(), juce::Colour (0xffff2a3a), 0.0f, yOf (2.0f), false);
+            juce::ColourGradient cg (ui::bone.withAlpha (0.30f), 0.0f, bar.getBottom(), onirique::look::tint (0xffff2a3a), 0.0f, yOf (2.0f), false);
             cg.addColour ((double) norm (-12.0f), ui::bone.withAlpha (0.85f));   // positions = niveau normalisé (bas = -60, haut = +2)
             cg.addColour ((double) norm (-3.0f), ui::ember);
             g.setGradientFill (cg);
@@ -879,7 +882,7 @@ void LevelMeter::paint (juce::Graphics& g)
         // maintien de crête
         if (holdDb[c] > -60.0f)
         {
-            g.setColour (holdDb[c] > 0.0f ? juce::Colour (0xffff2a3a) : ui::bone);
+            g.setColour (holdDb[c] > 0.0f ? onirique::look::tint (0xffff2a3a) : ui::bone);
             g.fillRect (juce::Rectangle<float> (bar.getX() + 1.0f, yOf (holdDb[c]) - 1.0f * u, bar.getWidth() - 2.0f, 2.0f * u));
         }
     }
@@ -888,7 +891,7 @@ void LevelMeter::paint (juce::Graphics& g)
     const juce::String txt = maxDb <= -99.0f ? juce::String ("-inf") : (maxDb > 0.0f ? "+" : "") + juce::String (maxDb, 1);
     g.setColour (juce::Colours::black.withAlpha (0.4f));
     g.fillRoundedRectangle (readout, readout.getHeight() * 0.5f);
-    g.setColour (maxDb > 0.0f ? juce::Colour (0xffff2a3a) : ui::line);
+    g.setColour (maxDb > 0.0f ? onirique::look::tint (0xffff2a3a) : ui::line);
     g.drawRoundedRectangle (readout.reduced (0.5f), readout.getHeight() * 0.5f, 1.0f);
     g.setColour (maxDb > 0.0f ? ui::bone : ui::mist);
     g.setFont (ui::fitFont (ui::Face::mono, readout.getHeight() * 0.62f, readout.getWidth() - 6.0f * u, txt, true));
@@ -1009,8 +1012,7 @@ void SegmentSelector::paint (juce::Graphics& g)
     // pastille du choix : verre rouge sombre, liseré rouge, une lueur discrète (qui s'éteint avant le bord du composant)
     const float room = std::min ({ pill.getX(), (float) getWidth() - pill.getRight(), pill.getY(), (float) getHeight() - pill.getBottom() });
     ui::strokeGlow (g, pp, ui::ember, 1.0f * u, 0.45f * dim, 2.0f * room);
-    g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.30f * dim), pill.getX(), pill.getY(),
-                                             ui::blood.withAlpha (0.65f * dim), pill.getX(), pill.getBottom(), false));
+    g.setGradientFill (juce::ColourGradient (ui::ember.withAlpha (0.6f * dim), pill.getX(), pill.getY(), onirique::look::emberDeep.withAlpha (0.6f * dim), pill.getX(), pill.getBottom(), false));
     g.fillPath (pp);
     g.setColour (ui::ember.interpolatedWith (ui::lilac, 0.35f).withMultipliedAlpha (dim));
     g.strokePath (pp, juce::PathStrokeType (std::max (1.0f, 1.1f * u)));

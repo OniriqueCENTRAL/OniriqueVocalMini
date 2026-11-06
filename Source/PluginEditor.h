@@ -10,6 +10,7 @@
 class VocalMiniView : public juce::Component, private juce::Timer
 {
 public:
+    void themeChanged() { backdropLayer = {}; }   // une autre couleur d'interface
     explicit VocalMiniView (OniriqueVocalMiniAudioProcessor&);
     ~VocalMiniView() override;
 
@@ -147,6 +148,7 @@ private:
     OniriqueVocalMiniAudioProcessor& processor;
     VocalMiniView view;
     onirique::nuit::Bar bar;
+    int themeSeen = -1;   // la couleur de l'interface déjà dessinée (OniriqueTheme.h)
     juce::Image logo, logoGlow;   // le logo du titre et sa lueur, qui respire
     std::unique_ptr<onirique::license::Overlay> licenseOverlay;
     bool restoringSize = true;

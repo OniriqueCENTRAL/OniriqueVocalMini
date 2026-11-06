@@ -1,3 +1,16 @@
+#if __has_include ("ui/OniriqueTheme.h")
+ #include "ui/OniriqueTheme.h"
+#elif __has_include ("UI/OniriqueTheme.h")
+ #include "UI/OniriqueTheme.h"
+#elif __has_include ("OniriqueTheme.h")
+ #include "OniriqueTheme.h"
+#elif __has_include ("../License/OniriqueTheme.h")
+ #include "../License/OniriqueTheme.h"
+#elif __has_include ("../../License/OniriqueTheme.h")
+ #include "../../License/OniriqueTheme.h"
+#else
+ #include "License/OniriqueTheme.h"
+#endif
 #include "MiniUI.h"
 #include "OniriqueKnob.h"
 
@@ -367,7 +380,7 @@ void LevelBar::paint (juce::Graphics& g)
     const float hx = track.getX() + track.getWidth() * norm (holdDb);
     if (holdDb > -60.0f)
     {
-        g.setColour ((holdDb > -1.0f ? juce::Colour (0xffFF6B8A) : ui::bone).withAlpha (0.9f));
+        g.setColour ((holdDb > -1.0f ? onirique::look::tint (0xffFF6B8A) : ui::bone).withAlpha (0.9f));
         g.fillRect (juce::Rectangle<float> (std::max (1.5f, 2.0f * es), track.getHeight() + 4.0f * es).withCentre ({ hx, track.getCentreY() }));
     }
 }
